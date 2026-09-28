@@ -5,6 +5,7 @@ import { buildNotifiers, resolveNotifyConfig } from "../../notify/config.ts";
 import { dispatchMilestoneNotifications } from "../../notify/dispatch.ts";
 import { buildMessage } from "../../notify/Notifier.ts";
 import { getActiveGoal, latestSnapshots } from "../../db/repo.ts";
+import { todayNz } from "../../db/client.ts";
 import { badRequest } from "../validate.ts";
 
 export function notificationRoutes(db: DatabaseSync) {
@@ -57,7 +58,7 @@ export function notificationRoutes(db: DatabaseSync) {
       milestoneId: 0,
       milestoneName: "Test message",
       milestoneAmount: goal?.targetAmountNzd ?? 0,
-      reachedOn: new Date().toISOString().slice(0, 10),
+      reachedOn: todayNz(),
       goalName: goal?.name ?? "No goal set",
       goalTarget: goal?.targetAmountNzd ?? 0,
       goalTargetDate: goal?.targetDate ?? null,

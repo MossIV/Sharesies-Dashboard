@@ -45,7 +45,12 @@ function reset(db: ReturnType<typeof openDb>): number {
     "DELETE FROM contributions WHERE external_ref LIKE 'demo:%' OR note = 'Monthly deposit (demo)'",
   ).run();
   const accounts = db.prepare("DELETE FROM accounts WHERE account_id = ?").run(ACCOUNT_ID);
-  return Number(snapshots.changes ?? 0) + Number(contributions.changes ?? 0) + Number(accounts.changes ?? 0);
+  // The goal too. Leaving it behind was the bug this fixes: it stayed active, and
+  // `getActiveGoal` then returned it ahead of the real goal, so the dashboard
+  // measured a demo target. Milestones go with it (ON DELETE CASCADE).
+  const goals = db.prepare("DELETE FROM goals WHERE source = 'demo'").run();
+  return Number(snapshots.changes ?? 0) + Number(contributions.changes ?? 0) +
+    Number(accounts.changes ?? 0) + Number(goals.changes ?? 0);
 }
 
 function main(): void {
@@ -108,6 +113,8 @@ function main(): void {
         .toISOString()
         .slice(0, 10),
       progressBasis: "value",
+      // Marks it as seeded so `--reset` removes it; a real goal never has this.
+      source: "demo",
     });
     for (const milestone of percentMilestones(100000)) {
       createMilestone(db, { goalId: goal.id, ...milestone });

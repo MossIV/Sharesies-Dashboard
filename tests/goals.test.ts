@@ -13,6 +13,7 @@ function goal(partial: Partial<Goal> = {}): Goal {
     progressBasis: "value",
     isActive: true,
     createdAt: "2026-01-01T00:00:00.000Z",
+    source: "manual",
     ...partial,
   };
 }

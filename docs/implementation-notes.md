@@ -43,6 +43,40 @@ document; this file records where the build diverged from it and why.
 | Export or backup | Both, and they are different things | Copying the database with `VACUUM INTO` is the backup; the JSON/CSV exports are for using the data elsewhere. Calling a download link a "backup" would imply the history is safe when it is still one disk failure away. |
 | Mobile-friendly layout | Single column below 900px, phone rules below 640px | Checked at 375px and 393px for horizontal overflow. Data tables scroll sideways rather than compressing, because a six-column table squeezed into 340px is not a layout, it is a smear. |
 
+## Found by the first real run
+
+Switch to live Akahu data on 2026-09-29, and the difference between demo data and a
+real connection showed up in four places. Each is fixed and pinned by a test.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| The dashboard measured a $100k demo goal instead of the real $18,000 one | `seed:demo:reset` deleted snapshots, contributions and its account, but not the goal it created. The leftover goal stayed active, and `getActiveGoal` ordered by `id ASC`, so the older row won | `goals.source` (migration 003), the reset deletes `source = 'demo'`, and `getActiveGoal` orders newest-first |
+| A second active goal was silently ignored | The schema allowed many rows with `is_active = 1` and nothing enforced one; "active" reads as single-valued because the UI has one progress bar and no goal switcher | `createGoal` and `updateGoal` deactivate the others |
+| The header said "across 2 accounts" while only one was in the goal | It counted every registered account, not the in-scope ones, next to an in-scope total | Counts the in-scope accounts and names the excluded ones |
+| The test alert said "$0.00" and today's date was a day off | `buildMessage` was called with `new Date().toISOString()`, which is UTC, while every other date in the app is Pacific/Auckland | Uses `todayNz()` |
+
+Two further notes from the same session:
+
+* **The `.env` file was never loaded.** Nothing read it — Node's `--env-file` was
+  not in any script — so the app had been falling back to defaults and the manual
+  source all along. Now every script runs with `--env-file-if-exists=.env`, which
+  also means a missing `.env` is not an error.
+* **`extractItems` did not know about `item`.** Akahu's single-resource responses
+  (`GET /me`) use the singular key, so `/me` parsed as an empty list. Added as the
+  last fallback, after the plural keys.
+
+## Learned from the real Akahu response
+
+`GET /me` for a personal app returns `{ success, item: { _id, access_granted_at } }`:
+no name, no email. Anything user-facing must come from `/accounts`.
+
+The real `/accounts` payload matched the documented shape closely, which the
+hand-written fixtures had already modelled — but the spike caught two parser
+assumptions worth recording: holding `symbol` values are sometimes six-digit
+Sharesies fund codes rather than tickers (`450002`), and `meta.breakdown.returns`
+sits right next to the value without being it, so treating `returns` as a balance
+would have been a plausible and very wrong guess.
+
 ## Verified against Akahu's docs
 
 Checked rather than assumed, because the plan flagged these as "re-check in Phase 0":
@@ -63,15 +97,16 @@ Checked rather than assumed, because the plan flagged these as "re-check in Phas
 
 ## Known gaps
 
-* **Phase 0's real Akahu spike is still outstanding.** Everything else runs today against
-  the manual source and the demo data; the spike needs the two tokens, and its gate
-  decides whether the allocation view has data to show. No code waits on it.
+* **Nothing schedules the daily job for you.** The plan's Task Scheduler / cron snippet in
+  the README is the whole mechanism, and `npm run backup` needs the same treatment or the
+  backups only exist when you remember. This is the next thing to do for the NAS.
+* **No Dockerfile yet.** Hosting in a NAS container is decided but not built; the README
+  says what the image needs.
+* **One snapshot of history so far.** Pace, and the 7/30-day change figures, need a few
+  days of data before they say anything; until then they are honestly blank.
 * **Milestone ETAs use the current goal's assumption set**, not a per-user override per
   request beyond the query parameters `GET /api/projection` already accepts.
 * **No auth on the API.** Intentional for a localhost-only personal app; revisit if it is
   ever bound to a non-loopback address.
 * **`web/dist` is not committed**, so `npm run web:build` is required before the API can
   serve the UI (the API says so in plain text at `/` if it is missing).
-* **Nothing schedules the daily job for you.** The plan's Task Scheduler / cron snippet in
-  the README is the whole mechanism, and `npm run backup` needs the same treatment or the
-  backups only exist when you remember.

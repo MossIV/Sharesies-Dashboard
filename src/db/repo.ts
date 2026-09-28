@@ -3,6 +3,7 @@
  * free of it, and so the pure domain layer never sees a database handle.
  */
 import type { DatabaseSync } from "node:sqlite";
+import { tx } from "./client.ts";
 import type { Goal, ProgressBasis } from "../domain/goals.ts";
 import type { Milestone, MilestoneKind, ValuePoint } from "../domain/milestones.ts";
 
@@ -280,6 +281,7 @@ function toGoal(row: Row): Goal {
     progressBasis: (s(row["progress_basis"]) === "contributions" ? "contributions" : "value") as ProgressBasis,
     isActive: n(row["is_active"]) === 1,
     createdAt: s(row["created_at"]),
+    source: (s(row["source"]) === "demo" ? "demo" : "manual") as Goal["source"],
   };
 }
 
@@ -293,7 +295,11 @@ export function getGoal(db: DatabaseSync, id: number): Goal | null {
 }
 
 export function getActiveGoal(db: DatabaseSync): Goal | null {
-  const row = db.prepare("SELECT * FROM goals WHERE is_active = 1 ORDER BY id ASC LIMIT 1").get() as
+  // Newest first. Activation is meant to be single-valued (createGoal and
+  // updateGoal both enforce that), but if a database somehow holds two active
+  // goals, the most recently created one is the user's intent; picking the
+  // lowest id silently measured an old goal instead.
+  const row = db.prepare("SELECT * FROM goals WHERE is_active = 1 ORDER BY id DESC LIMIT 1").get() as
     | Row
     | undefined;
   return row ? toGoal(row) : null;
@@ -305,21 +311,38 @@ export interface GoalInput {
   targetDate?: string | null;
   progressBasis?: ProgressBasis;
   isActive?: boolean;
+  /** "demo" marks a goal created by the seeder, so `--reset` can remove it. */
+  source?: GoalSource;
 }
 
+export type GoalSource = "manual" | "demo";
+
 export function createGoal(db: DatabaseSync, input: GoalInput): Goal {
-  const result = db.prepare(
-    `INSERT INTO goals (name, target_amount_nzd, target_date, progress_basis, is_active, created_at)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(
-    input.name,
-    input.targetAmountNzd,
-    input.targetDate ?? null,
-    input.progressBasis ?? "value",
-    input.isActive === false ? 0 : 1,
-    new Date().toISOString(),
-  );
-  const goal = getGoal(db, Number(result.lastInsertRowid));
+  const isActive = input.isActive !== false;
+
+  const result = tx(db, () => {
+    const inserted = db.prepare(
+      `INSERT INTO goals (name, target_amount_nzd, target_date, progress_basis, is_active, created_at, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    ).run(
+      input.name,
+      input.targetAmountNzd,
+      input.targetDate ?? null,
+      input.progressBasis ?? "value",
+      isActive ? 1 : 0,
+      new Date().toISOString(),
+      input.source ?? "manual",
+    );
+
+    // The dashboard has one progress bar, so a new active goal replaces the
+    // previous one instead of quietly losing to it on id order.
+    if (isActive) {
+      db.prepare("UPDATE goals SET is_active = 0 WHERE id <> ?").run(Number(inserted.lastInsertRowid));
+    }
+    return Number(inserted.lastInsertRowid);
+  });
+
+  const goal = getGoal(db, result);
   if (!goal) throw new Error("Failed to create goal");
   return goal;
 }
@@ -328,17 +351,25 @@ export function updateGoal(db: DatabaseSync, id: number, patch: Partial<GoalInpu
   const current = getGoal(db, id);
   if (!current) return null;
 
-  db.prepare(
-    `UPDATE goals SET name = ?, target_amount_nzd = ?, target_date = ?, progress_basis = ?, is_active = ?
-      WHERE id = ?`,
-  ).run(
-    patch.name ?? current.name,
-    patch.targetAmountNzd ?? current.targetAmountNzd,
-    patch.targetDate === undefined ? current.targetDate : patch.targetDate,
-    patch.progressBasis ?? current.progressBasis,
-    (patch.isActive ?? current.isActive) ? 1 : 0,
-    id,
-  );
+  tx(db, () => {
+    db.prepare(
+      `UPDATE goals SET name = ?, target_amount_nzd = ?, target_date = ?, progress_basis = ?, is_active = ?
+        WHERE id = ?`,
+    ).run(
+      patch.name ?? current.name,
+      patch.targetAmountNzd ?? current.targetAmountNzd,
+      patch.targetDate === undefined ? current.targetDate : patch.targetDate,
+      patch.progressBasis ?? current.progressBasis,
+      (patch.isActive ?? current.isActive) ? 1 : 0,
+      id,
+    );
+
+    // Reactivating a goal makes it the one the dashboard measures.
+    if (patch.isActive === true) {
+      db.prepare("UPDATE goals SET is_active = 0 WHERE id <> ?").run(id);
+    }
+  });
+
   return getGoal(db, id);
 }
 

@@ -20,6 +20,8 @@ export interface Goal {
   progressBasis: ProgressBasis;
   isActive: boolean;
   createdAt: string;
+  /** "demo" marks the goal the seeder creates, so `seed:demo:reset` can remove it. */
+  source: "manual" | "demo";
 }
 
 /** Percentage-point band around the straight-line path treated as "on track". */

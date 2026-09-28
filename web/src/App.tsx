@@ -138,8 +138,11 @@ export default function App() {
         <div>
           <h1>Sharesies Goal Dashboard</h1>
           <div className="sub">
-            as of {summary.asOf} · {nzd(summary.currentValue)} across {health.accounts.length} account
-            {health.accounts.length === 1 ? "" : "s"}
+            as of {summary.asOf} · {nzd(summary.currentValue)} across {accounts.inScopeCount} account
+            {accounts.inScopeCount === 1 ? "" : "s"}
+            {accounts.inScopeCount < accounts.accounts.length
+              ? ` (${accounts.accounts.length - accounts.inScopeCount} not in the goal)`
+              : ""}
           </div>
         </div>
         <div className="badges">

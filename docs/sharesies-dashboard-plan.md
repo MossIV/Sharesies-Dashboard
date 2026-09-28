@@ -263,14 +263,37 @@ sharesies-dashboard/
 
 ---
 
-## 14. Open decisions
+## 14. Open decisions — resolved
 
-1. **Goal scope:** Sharesies only, or also KiwiSaver, bank savings and other accounts (Akahu can supply them)?
-2. **Target:** amount and optional date, and the first set of milestones.
-3. **Progress basis:** value (default) or net contributions?
-4. **Hosting:** your laptop, a home server or Raspberry Pi, or a small private VPS behind a VPN?
-5. **Stack:** TypeScript (recommended) or Python?
-6. **Notifications:** do you want alerts when a milestone is reached?
+Answered on 2026-09-29, before the first real collection. The original question is
+kept so the reasoning stays visible.
+
+1. **Goal scope:** Sharesies only, or also KiwiSaver and other accounts?
+   **Sharesies only.** The Akahu connection exposes two Sharesies accounts; the goal
+   tracks one of them, see (2). No KiwiSaver or bank accounts are counted. The scope
+   is a per-account flag, so including another account later is a click, and every
+   account is snapshotted either way so the history is there to backfill.
+2. **Target:** amount, optional date, and the first milestones.
+   **$18,000, no target date, measured on "Ben's High-growth portfolio"** (the
+   Recommended Investment Portfolio). The other account, "Ben's Investments", is
+   deliberately *not* counted, even though it is the larger balance: the goal is
+   about that one portfolio growing. Milestones are the standard 25/50/75/100% of
+   the target, i.e. $4,500 / $9,000 / $13,500 / $18,000. No target date was set, so
+   the pace line and the "needed monthly" figure stay out of the way; the projection
+   chart still gives dates under each assumption.
+3. **Progress basis:** **value** (the default). Net contributions would need a
+   deposit log, and Akahu cannot see Sharesies trades, so the contribution log
+   starts empty and fills from the transaction report or bank-transfer detection.
+4. **Hosting:** **a container on the NAS**, but localhost for now while it is being
+   tested. Nothing in the app assumes localhost except the default `API_HOST`; the
+   container needs the volume mounted for `data/` (the only copy of the history) and
+   `backups/`, and should sit behind the NAS's own access control rather than being
+   published to the internet (section 12).
+5. **Stack:** **TypeScript**, as recommended. Node runs it directly with no build
+   step; `tsc` is only used for `--noEmit` typechecking.
+6. **Notifications:** **yes, phone push.** Delivered through `ntfy.sh` on a topic
+   whose name is the only secret (see `.env`). One alert per milestone per channel,
+   recorded in the database so a restart cannot re-send it.
 
 ---
 
