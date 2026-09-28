@@ -13,8 +13,10 @@ import {
   finishSyncRun,
   insertRawFetch,
   replaceHoldings,
+  scopedAccountIds,
   stampReachedMilestones,
   startSyncRun,
+  upsertAccount,
   upsertSnapshot,
 } from "../db/repo.ts";
 
@@ -96,30 +98,57 @@ export async function collectOnce(
       payload: fetchResult.raw,
     });
 
-    // 3. Match on connection.name, never a hard-coded account id.
-    const selected = selectPortfolioAccounts(fetchResult.accounts);
-    if (selected.length === 0) {
+    // 3. Register every account seen, then snapshot the ones in scope.
+    //
+    // The collector's filter decides the *initial* scope of a newly seen
+    // account. After that the dashboard owns the choice, which is how KiwiSaver
+    // or another Akahu account can be added to the goal without touching a
+    // filter (plan section 14.1 and Phase 4).
+    const defaultScope = selectPortfolioAccounts(fetchResult.accounts);
+    const defaultScopeIds = new Set(defaultScope.map((account) => account.accountId));
+
+    for (const account of fetchResult.accounts) {
+      upsertAccount(db, {
+        accountId: account.accountId,
+        accountName: account.accountName,
+        connectionName: account.connectionName,
+        accountType: account.accountType,
+        currency: account.currency,
+        status: account.status,
+        defaultInScope: defaultScopeIds.has(account.accountId),
+      });
+    }
+
+    const scope = new Set(scopedAccountIds(db));
+    const scoped = fetchResult.accounts.filter((account) => scope.has(account.accountId));
+
+    if (scoped.length === 0) {
       const seen = fetchResult.accounts
         .map((account) => `${account.connectionName ?? "?"}/${account.accountType ?? "?"}`)
         .join(", ");
       warnings.push(
-        `No Sharesies investment accounts matched in ${fetchResult.accounts.length} account(s)` +
+        `No accounts are inside the goal scope (${fetchResult.accounts.length} seen` +
           (seen ? `: ${seen}` : "") +
-          ". Check AKAHU_CONNECTION_MATCH / AKAHU_ACCOUNT_TYPES.",
+          "). Snapshots are still recorded; include one on the Accounts card to count it toward the goal.",
       );
     }
 
-    const totals = totalValue(selected);
+    const totals = totalValue(scoped);
     if (totals.mixedCurrency) {
       warnings.push(
-        `Selected accounts mix currencies (${selected.map((a) => a.currency).join(", ")}). ` +
+        `Scoped accounts mix currencies (${scoped.map((a) => a.currency).join(", ")}). ` +
           "No FX conversion is applied, so the total is not meaningful.",
       );
     }
 
-    // 4. One snapshot row per account, plus holdings when meta exposes them.
+    // 4. One snapshot row per account seen, plus holdings when meta exposes them.
+    //
+    // Every account is snapshotted, not just the ones in scope: the scope only
+    // decides what the goal total sums. Collecting the rest costs a few rows and
+    // means widening the goal later does not leave a hole in the history, which
+    // is the trap the plan warns about for history generally (section 13).
     let snapshotsWritten = 0;
-    for (const account of selected) {
+    for (const account of fetchResult.accounts) {
       insertRawFetch(db, {
         fetchedAt: nowIso,
         endpoint: `${fetchResult.endpoint}#${account.accountId}`,
@@ -147,8 +176,8 @@ export async function collectOnce(
     // 6. Stamp any newly reached milestones.
     const milestonesStamped = stampReachedMilestones(db);
 
-    // 7. Sync health.
-    const refreshTimes = selected
+    // 7. Sync health, judged on the accounts that feed the goal.
+    const refreshTimes = scoped
       .map((account) => account.sourceRefreshedAt)
       .filter((value): value is string => Boolean(value));
     const oldest = refreshTimes.sort()[0] ?? null;
@@ -157,9 +186,9 @@ export async function collectOnce(
     let stale = false;
     let staleReason: string | null = null;
 
-    if (selected.length === 0) {
+    if (scoped.length === 0) {
       stale = true;
-      staleReason = "No matching accounts were returned.";
+      staleReason = "No accounts are inside the goal scope.";
     } else if (totals.hasInactive) {
       stale = true;
       staleReason = "An account is INACTIVE. Reconnect at my.akahu.nz/connections.";
@@ -184,7 +213,7 @@ export async function collectOnce(
       snapshotDate,
       accountsSeen: fetchResult.accounts.length,
       snapshotsWritten,
-      value: selected.length > 0 ? Math.round(totals.value * 100) / 100 : null,
+      value: scoped.length > 0 ? Math.round(totals.value * 100) / 100 : null,
       stale,
       staleReason,
       milestonesStamped,

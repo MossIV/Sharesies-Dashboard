@@ -17,16 +17,28 @@ export interface SelectionOptions {
   accountTypes?: string[];
 }
 
+/** Substring/regex tested against connection.name. Default: "sharesies". */
+export function scopePattern(): string {
+  return process.env["AKAHU_CONNECTION_MATCH"]?.trim() || "sharesies";
+}
+
+/** Account types a newly discovered account must match to be in scope by default. */
+export function defaultScopeTypes(): Set<string> {
+  return new Set(
+    (process.env["AKAHU_ACCOUNT_TYPES"]?.split(",") ?? DEFAULT_PORTFOLIO_TYPES)
+      .map((entry) => entry.trim().toUpperCase())
+      .filter(Boolean),
+  );
+}
+
 export function selectPortfolioAccounts(
   accounts: NormalizedAccount[],
   options: SelectionOptions = {},
 ): NormalizedAccount[] {
-  const pattern = options.connectionMatch?.trim() || process.env["AKAHU_CONNECTION_MATCH"] || "sharesies";
-  const types = new Set(
-    (options.accountTypes ?? process.env["AKAHU_ACCOUNT_TYPES"]?.split(",") ?? DEFAULT_PORTFOLIO_TYPES)
-      .map((entry) => entry.trim().toUpperCase())
-      .filter(Boolean),
-  );
+  const pattern = options.connectionMatch?.trim() || scopePattern();
+  const types = options.accountTypes
+    ? new Set(options.accountTypes.map((entry) => entry.trim().toUpperCase()).filter(Boolean))
+    : defaultScopeTypes();
 
   let matcher: RegExp;
   try {

@@ -64,7 +64,9 @@ test("GET /api/summary reports value, goal, milestones and sync health", async (
 
   assert.equal(summary.syncHealth.stale, false);
   assert.equal(summary.syncHealth.lastSnapshotDate, "2026-09-28");
-  assert.equal(summary.syncHealth.accounts.length, 2);
+  // All three accounts are listed, including the ANZ one that is out of scope.
+  assert.equal(summary.syncHealth.accounts.length, 3);
+  assert.equal(summary.syncHealth.excludedAccounts.length, 1);
   assert.equal(summary.syncHealth.daysCollected, 1);
   assert.equal(summary.dataMode, "akahu");
 
@@ -375,8 +377,8 @@ test("GET /api/health summarises the snapshot store", async () => {
 
   const health = await json(await app.request("/api/health"));
   assert.equal(health.status, "ok");
-  assert.equal(health.snapshotCount, 2);
-  assert.equal(health.sync.accounts.length, 2);
+  assert.equal(health.snapshotCount, 3);
+  assert.equal(health.sync.accounts.length, 3);
 
   db.close();
 });

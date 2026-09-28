@@ -59,12 +59,15 @@ test("collects a snapshot per matching account and stores holdings", async () =>
   assert.equal(result.status, "ok");
   assert.equal(result.snapshotDate, "2026-09-28");
   assert.equal(result.accountsSeen, 3);
-  assert.equal(result.snapshotsWritten, 2, "ANZ is not a Sharesies account");
-  assert.equal(result.value, 18844.7);
+  // Every account seen is snapshotted; the goal scope decides what the total sums.
+  assert.equal(result.snapshotsWritten, 3);
+  assert.equal(result.value, 18844.7, "the ANZ account is out of scope");
   assert.equal(result.stale, false);
 
+  // Scoped reads: the ANZ account is excluded from the series and the total.
   const snapshots = listSnapshots(db);
   assert.deepEqual(snapshots.map((s) => s.valueNzd), [18432.55, 412.15]);
+  assert.equal(listSnapshots(db, { scope: "all" }).length, 3);
   assert.equal(snapshots[0]?.sourceRefreshedAt, "2026-09-28T02:11:04.000Z");
   assert.equal(snapshots[0]?.source, "akahu");
 
@@ -73,7 +76,7 @@ test("collects a snapshot per matching account and stores holdings", async () =>
 
   const run = latestSyncRun(db);
   assert.equal(run?.status, "ok");
-  assert.equal(run?.snapshotsWritten, 2);
+  assert.equal(run?.snapshotsWritten, 3);
   assert.ok(run?.finishedAt);
 
   db.close();
@@ -88,12 +91,14 @@ test("the raw payload is stored before anything is derived from it", async () =>
     account_id: string | null;
   }[];
 
-  // One row for the whole response, then one per selected account.
-  assert.equal(rows.length, 3);
+  // One row for the whole response, then one per account seen.
+  assert.equal(rows.length, 4);
   assert.equal(rows[0]?.endpoint, "/accounts");
   assert.equal(rows[0]?.account_id, null);
-  assert.equal(rows[1]?.account_id, "acc_sharesies_investment_0001");
-  assert.equal(rows[2]?.account_id, "acc_sharesies_wallet_0001");
+  assert.deepEqual(
+    rows.slice(1).map((row) => row.account_id).sort(),
+    ["acc_anz_everyday_0001", "acc_sharesies_investment_0001", "acc_sharesies_wallet_0001"],
+  );
 
   const payload = db.prepare("SELECT payload_json FROM raw_fetches WHERE id = 1").get() as { payload_json: string };
   assert.equal(JSON.parse(payload.payload_json).success, true);

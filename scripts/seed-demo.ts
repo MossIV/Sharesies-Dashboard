@@ -11,7 +11,13 @@
  */
 import { openDb, todayNz } from "../src/db/client.ts";
 import { migrate } from "../src/db/migrate.ts";
-import { createContribution, createGoal, createMilestone, getActiveGoal } from "../src/db/repo.ts";
+import {
+  createGoal,
+  createMilestone,
+  getActiveGoal,
+  importContribution,
+  upsertAccount,
+} from "../src/db/repo.ts";
 import { percentMilestones } from "../src/domain/milestones.ts";
 
 const DAYS = 240;
@@ -31,8 +37,11 @@ function rng(seed: number): () => number {
 
 function reset(db: ReturnType<typeof openDb>): number {
   const snapshots = db.prepare("DELETE FROM snapshots WHERE source = 'demo'").run();
-  const contributions = db.prepare("DELETE FROM contributions WHERE source = 'bank'").run();
-  return Number(snapshots.changes ?? 0) + Number(contributions.changes ?? 0);
+  // Demo contributions carry a `demo:` reference so this can never delete a real
+  // bank or CSV import (those use the provider id or a `csv:` hash).
+  const contributions = db.prepare("DELETE FROM contributions WHERE external_ref LIKE 'demo:%'").run();
+  const accounts = db.prepare("DELETE FROM accounts WHERE account_id = ?").run(ACCOUNT_ID);
+  return Number(snapshots.changes ?? 0) + Number(contributions.changes ?? 0) + Number(accounts.changes ?? 0);
 }
 
 function main(): void {
@@ -74,6 +83,18 @@ function main(): void {
     insert.run(row.date, ACCOUNT_ID, row.value, nowIso, nowIso);
   }
 
+  // Register the account so the scoped total includes it (the totals join the
+  // accounts registry).
+  upsertAccount(db, {
+    accountId: ACCOUNT_ID,
+    accountName: "Sharesies (demo)",
+    connectionName: "Sharesies (demo)",
+    accountType: "INVESTMENT",
+    currency: "NZD",
+    status: "ACTIVE",
+    defaultInScope: true,
+  });
+
   let goal = getActiveGoal(db);
   if (!goal) {
     goal = createGoal(db, {
@@ -91,18 +112,19 @@ function main(): void {
   }
 
   // Monthly deposits across the seeded window.
-  const existingContributions = db.prepare("SELECT COUNT(*) AS count FROM contributions WHERE source = 'bank'")
+  const existingContributions = db.prepare("SELECT COUNT(*) AS count FROM contributions WHERE external_ref LIKE 'demo:%'")
     .get() as { count: number };
   if (existingContributions.count === 0) {
     for (let monthsAgo = 7; monthsAgo >= 0; monthsAgo--) {
       const date = new Date(Date.parse(`${today}T00:00:00.000Z`) - monthsAgo * 30 * 86_400_000)
         .toISOString()
         .slice(0, 10);
-      createContribution(db, {
+      importContribution(db, {
         contributionDate: date,
         amountNzd: 400,
         note: "Monthly deposit (demo)",
         source: "bank",
+        externalRef: `demo:${date}`,
       });
     }
   }

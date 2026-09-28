@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   api,
   nzd,
+  type AccountList,
   type Contribution,
   type Holdings,
   type Projection,
@@ -12,6 +13,7 @@ import {
 import { GoalProgress } from "./components/GoalProgress.tsx";
 import { MilestoneTimeline } from "./components/MilestoneTimeline.tsx";
 import { SyncHealthStrip } from "./components/SyncHealthStrip.tsx";
+import { AccountsCard } from "./components/AccountsCard.tsx";
 import { AllocationDonut, ContributionsChart, ProjectionChart, ValueChart } from "./components/Charts.tsx";
 import { ContributionLog } from "./components/ContributionLog.tsx";
 import { SettingsPanel } from "./components/SettingsPanel.tsx";
@@ -20,6 +22,7 @@ interface Data {
   summary: Summary;
   series: SnapshotSeries;
   holdings: Holdings;
+  accounts: AccountList;
   contributions: { contributions: Contribution[]; total: number; totalAllTime: number };
   projection: Projection;
   settings: Settings;
@@ -33,15 +36,16 @@ export default function App() {
 
   const load = useCallback(async () => {
     try {
-      const [summary, series, holdings, contributions, projection, settings] = await Promise.all([
+      const [summary, series, holdings, accounts, contributions, projection, settings] = await Promise.all([
         api.summary(),
         api.snapshots(),
         api.holdings(),
+        api.accounts(),
         api.contributions(),
         api.projection({}),
         api.settings(),
       ]);
-      setData({ summary, series, holdings, contributions, projection, settings });
+      setData({ summary, series, holdings, accounts, contributions, projection, settings });
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -105,7 +109,7 @@ export default function App() {
     );
   }
 
-  const { summary, series, holdings, contributions, projection, settings } = data;
+  const { summary, series, holdings, accounts, contributions, projection, settings } = data;
   const health = summary.syncHealth;
 
   return (
@@ -163,6 +167,16 @@ export default function App() {
 
       <div style={{ marginBottom: 16 }}>
         <ValueChart series={series} milestones={summary.milestones} />
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <AccountsCard
+          accounts={accounts}
+          onToggle={async (accountId, inScope) => {
+            await api.setAccountScope(accountId, inScope);
+            await load();
+          }}
+        />
       </div>
 
       <div className="grid cols-2" style={{ marginBottom: 16 }}>

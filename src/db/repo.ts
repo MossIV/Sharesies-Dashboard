@@ -143,27 +143,44 @@ export function replaceHoldings(db: DatabaseSync, snapshotId: number, holdings: 
   }
 }
 
-export function listSnapshots(
-  db: DatabaseSync,
-  options: { from?: string | undefined; to?: string | undefined; accountId?: string | undefined } = {},
-): SnapshotRow[] {
+export interface SnapshotQuery {
+  from?: string | undefined;
+  to?: string | undefined;
+  accountId?: string | undefined;
+  /**
+   * "in" (default) counts only accounts inside the goal scope; "all" ignores the
+   * scope, which is what the sync-health strip wants, because an excluded
+   * account is still worth seeing.
+   */
+  scope?: "in" | "all";
+}
+
+/** Shared WHERE builder: every snapshot query filters on the same rules. */
+function snapshotFilter(options: SnapshotQuery, alias = "s"): { where: string; params: (string | number)[] } {
   const clauses: string[] = [];
   const params: (string | number)[] = [];
   if (options.from) {
-    clauses.push("snapshot_date >= ?");
+    clauses.push(`${alias}.snapshot_date >= ?`);
     params.push(options.from);
   }
   if (options.to) {
-    clauses.push("snapshot_date <= ?");
+    clauses.push(`${alias}.snapshot_date <= ?`);
     params.push(options.to);
   }
   if (options.accountId) {
-    clauses.push("account_id = ?");
+    clauses.push(`${alias}.account_id = ?`);
     params.push(options.accountId);
   }
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  if ((options.scope ?? "in") === "in") {
+    clauses.push("EXISTS (SELECT 1 FROM accounts a WHERE a.account_id = s.account_id AND a.in_scope = 1)");
+  }
+  return { where: clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "", params };
+}
+
+export function listSnapshots(db: DatabaseSync, options: SnapshotQuery = {}): SnapshotRow[] {
+  const { where, params } = snapshotFilter(options);
   const rows = db.prepare(
-    `SELECT * FROM snapshots ${where} ORDER BY snapshot_date ASC, account_id ASC`,
+    `SELECT * FROM snapshots s ${where} ORDER BY snapshot_date ASC, account_id ASC`,
   ).all(...params) as Row[];
 
   return rows.map((row) => ({
@@ -180,27 +197,14 @@ export function listSnapshots(
   }));
 }
 
-/** One point per date, summed across accounts: the series the charts plot. */
-export function totalSeries(
-  db: DatabaseSync,
-  options: { from?: string | undefined; to?: string | undefined } = {},
-): ValuePoint[] {
-  const clauses: string[] = [];
-  const params: string[] = [];
-  if (options.from) {
-    clauses.push("snapshot_date >= ?");
-    params.push(options.from);
-  }
-  if (options.to) {
-    clauses.push("snapshot_date <= ?");
-    params.push(options.to);
-  }
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+/** One point per date, summed across the accounts in scope: the series the charts plot. */
+export function totalSeries(db: DatabaseSync, options: SnapshotQuery = {}): ValuePoint[] {
+  const { where, params } = snapshotFilter(options);
   const rows = db.prepare(
-    `SELECT snapshot_date AS date, ROUND(SUM(value_nzd), 2) AS value
-       FROM snapshots ${where}
-      GROUP BY snapshot_date
-      ORDER BY snapshot_date ASC`,
+    `SELECT s.snapshot_date AS date, ROUND(SUM(s.value_nzd), 2) AS value
+       FROM snapshots s ${where}
+      GROUP BY s.snapshot_date
+      ORDER BY s.snapshot_date ASC`,
   ).all(...params) as Row[];
 
   return rows.map((row) => ({ date: s(row["date"]), value: n(row["value"]) }));
@@ -211,10 +215,37 @@ export function latestSnapshotDate(db: DatabaseSync): string | null {
   return sn(row?.["d"]);
 }
 
-export function latestSnapshots(db: DatabaseSync): SnapshotRow[] {
+export function latestSnapshots(db: DatabaseSync, options: { scope?: "in" | "all" } = {}): SnapshotRow[] {
   const latest = latestSnapshotDate(db);
   if (!latest) return [];
-  return listSnapshots(db, { from: latest, to: latest });
+  return listSnapshots(db, { from: latest, to: latest, scope: options.scope ?? "in" });
+}
+
+/**
+ * The most recent snapshot for each account, regardless of date. Used by the
+ * Accounts card, because an account that has not been collected today (an
+ * excluded KiwiSaver account, say) still has a last known value.
+ */
+export function latestSnapshotPerAccount(db: DatabaseSync): SnapshotRow[] {
+  const rows = db.prepare(
+    `SELECT * FROM snapshots s
+      WHERE s.snapshot_date = (
+        SELECT MAX(snapshot_date) FROM snapshots WHERE account_id = s.account_id
+      )
+      ORDER BY s.account_id`,
+  ).all() as Row[];
+  return rows.map((row) => ({
+    id: n(row["id"]),
+    snapshotDate: s(row["snapshot_date"]),
+    accountId: s(row["account_id"]),
+    accountName: s(row["account_name"]),
+    valueNzd: n(row["value_nzd"]),
+    currency: s(row["currency"]),
+    sourceRefreshedAt: sn(row["source_refreshed_at"]),
+    status: s(row["status"]) === "INACTIVE" ? "INACTIVE" : "ACTIVE",
+    source: s(row["source"]),
+    createdAt: s(row["created_at"]),
+  }));
 }
 
 export function latestHoldings(db: DatabaseSync): HoldingRow[] {
@@ -222,6 +253,7 @@ export function latestHoldings(db: DatabaseSync): HoldingRow[] {
     `SELECT h.* FROM holding_snapshots h
        JOIN snapshots s ON s.id = h.snapshot_id
       WHERE s.snapshot_date = (SELECT MAX(snapshot_date) FROM snapshots)
+        AND EXISTS (SELECT 1 FROM accounts a WHERE a.account_id = s.account_id AND a.in_scope = 1)
       ORDER BY h.value DESC`,
   ).all() as Row[];
   return rows.map((row) => ({
@@ -549,4 +581,266 @@ export function recentSyncRuns(db: DatabaseSync, limit = 10): SyncRunRow[] {
     snapshotsWritten: n(row["snapshots_written"]),
     stale: n(row["stale"]),
   }));
+}
+
+// -------------------------------------------------------------------- accounts
+
+export interface AccountRow {
+  accountId: string;
+  accountName: string;
+  connectionName: string | null;
+  accountType: string | null;
+  currency: string;
+  status: "ACTIVE" | "INACTIVE";
+  inScope: boolean;
+  firstSeenAt: string;
+  lastSeenAt: string;
+}
+
+function toAccount(row: Row): AccountRow {
+  return {
+    accountId: s(row["account_id"]),
+    accountName: s(row["account_name"]),
+    connectionName: sn(row["connection_name"]),
+    accountType: sn(row["account_type"]),
+    currency: s(row["currency"]),
+    status: s(row["status"]) === "INACTIVE" ? "INACTIVE" : "ACTIVE",
+    inScope: n(row["in_scope"]) === 1,
+    firstSeenAt: s(row["first_seen_at"]),
+    lastSeenAt: s(row["last_seen_at"]),
+  };
+}
+
+export interface AccountInput {
+  accountId: string;
+  accountName: string;
+  connectionName: string | null;
+  accountType: string | null;
+  currency: string;
+  status: "ACTIVE" | "INACTIVE";
+  /** Applied only on first insert; afterwards the user owns this field. */
+  defaultInScope: boolean;
+}
+
+export function upsertAccount(db: DatabaseSync, input: AccountInput): void {
+  // in_scope is deliberately absent from the update list: an account the user
+  // excluded must stay excluded across collections.
+  db.prepare(
+    `INSERT INTO accounts (
+       account_id, account_name, connection_name, account_type, currency, status,
+       in_scope, first_seen_at, last_seen_at
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (account_id) DO UPDATE SET
+       account_name    = excluded.account_name,
+       connection_name = excluded.connection_name,
+       account_type    = excluded.account_type,
+       currency        = excluded.currency,
+       status          = excluded.status,
+       last_seen_at    = excluded.last_seen_at`,
+  ).run(
+    input.accountId,
+    input.accountName,
+    input.connectionName,
+    input.accountType,
+    input.currency,
+    input.status,
+    input.defaultInScope ? 1 : 0,
+    new Date().toISOString(),
+    new Date().toISOString(),
+  );
+}
+
+export function listAccounts(db: DatabaseSync): AccountRow[] {
+  const rows = db.prepare(
+    `SELECT * FROM accounts ORDER BY in_scope DESC, connection_name ASC, account_name ASC`,
+  ).all() as Row[];
+  return rows.map(toAccount);
+}
+
+export function getAccount(db: DatabaseSync, accountId: string): AccountRow | null {
+  const row = db.prepare("SELECT * FROM accounts WHERE account_id = ?").get(accountId) as Row | undefined;
+  return row ? toAccount(row) : null;
+}
+
+export function setAccountScope(db: DatabaseSync, accountId: string, inScope: boolean): AccountRow | null {
+  const result = db.prepare("UPDATE accounts SET in_scope = ? WHERE account_id = ?")
+    .run(inScope ? 1 : 0, accountId);
+  if (Number(result.changes ?? 0) === 0) return null;
+  return getAccount(db, accountId);
+}
+
+/** Account ids currently counted toward the goal. */
+export function scopedAccountIds(db: DatabaseSync): string[] {
+  return (db.prepare("SELECT account_id FROM accounts WHERE in_scope = 1 ORDER BY account_id").all() as Row[])
+    .map((row) => s(row["account_id"]));
+}
+
+// --------------------------------------------------------------------- imports
+
+export interface ImportRow {
+  id: number;
+  kind: string;
+  filename: string | null;
+  importedAt: string;
+  rowsSeen: number;
+  rowsImported: number;
+  rowsSkipped: number;
+  report: unknown;
+}
+
+export function recordImport(
+  db: DatabaseSync,
+  entry: {
+    kind: string;
+    filename?: string | null;
+    rowsSeen: number;
+    rowsImported: number;
+    rowsSkipped: number;
+    report?: unknown;
+  },
+): number {
+  const result = db.prepare(
+    `INSERT INTO imports (kind, filename, imported_at, rows_seen, rows_imported, rows_skipped, report_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    entry.kind,
+    entry.filename ?? null,
+    new Date().toISOString(),
+    entry.rowsSeen,
+    entry.rowsImported,
+    entry.rowsSkipped,
+    entry.report === undefined ? null : JSON.stringify(entry.report),
+  );
+  return Number(result.lastInsertRowid);
+}
+
+export function listImports(db: DatabaseSync, limit = 20): ImportRow[] {
+  const rows = db.prepare("SELECT * FROM imports ORDER BY imported_at DESC, id DESC LIMIT ?")
+    .all(limit) as Row[];
+  return rows.map((row) => ({
+    id: n(row["id"]),
+    kind: s(row["kind"]),
+    filename: sn(row["filename"]),
+    importedAt: s(row["imported_at"]),
+    rowsSeen: n(row["rows_seen"]),
+    rowsImported: n(row["rows_imported"]),
+    rowsSkipped: n(row["rows_skipped"]),
+    report: row["report_json"] === null || row["report_json"] === undefined
+      ? null
+      : JSON.parse(String(row["report_json"])),
+  }));
+}
+
+export function findContributionByRef(db: DatabaseSync, externalRef: string): ContributionRow | null {
+  const row = db.prepare("SELECT * FROM contributions WHERE external_ref = ?").get(externalRef) as Row | undefined;
+  return row ? toContribution(row) : null;
+}
+
+/**
+ * Insert a contribution that carries a provider reference, skipping it when the
+ * reference has already been imported. This is what makes re-running an import
+ * idempotent (plan section 6).
+ */
+export function importContribution(
+  db: DatabaseSync,
+  input: {
+    contributionDate: string;
+    amountNzd: number;
+    note?: string | null;
+    source: ContributionRow["source"];
+    externalRef: string | null;
+  },
+): { contribution: ContributionRow | null; skipped: boolean } {
+  if (input.externalRef !== null) {
+    const existing = findContributionByRef(db, input.externalRef);
+    if (existing) return { contribution: existing, skipped: true };
+  }
+
+  const result = db.prepare(
+    `INSERT INTO contributions (contribution_date, amount_nzd, note, source, created_at, external_ref)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+  ).run(
+    input.contributionDate,
+    input.amountNzd,
+    input.note ?? null,
+    input.source,
+    new Date().toISOString(),
+    input.externalRef,
+  );
+  const row = db.prepare("SELECT * FROM contributions WHERE id = ?").get(Number(result.lastInsertRowid)) as Row;
+  return { contribution: toContribution(row), skipped: false };
+}
+
+// --------------------------------------------------------------- notifications
+
+export interface NotificationRow {
+  id: number;
+  milestoneId: number | null;
+  channel: string;
+  status: "sent" | "error" | "skipped";
+  error: string | null;
+  detail: string | null;
+  createdAt: string;
+}
+
+export function recordNotification(
+  db: DatabaseSync,
+  entry: { milestoneId: number | null; channel: string; status: NotificationRow["status"]; error?: string | null; detail?: string | null },
+): void {
+  db.prepare(
+    `INSERT INTO notifications (milestone_id, channel, status, error, detail, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT (milestone_id, channel) DO UPDATE SET
+       status = excluded.status, error = excluded.error, detail = excluded.detail`,
+  ).run(
+    entry.milestoneId,
+    entry.channel,
+    entry.status,
+    entry.error ?? null,
+    entry.detail ?? null,
+    new Date().toISOString(),
+  );
+}
+
+export function listNotifications(db: DatabaseSync, limit = 50): NotificationRow[] {
+  const rows = db.prepare("SELECT * FROM notifications ORDER BY created_at DESC, id DESC LIMIT ?")
+    .all(limit) as Row[];
+  return rows.map((row) => ({
+    id: n(row["id"]),
+    milestoneId: row["milestone_id"] === null || row["milestone_id"] === undefined ? null : n(row["milestone_id"]),
+    channel: s(row["channel"]),
+    status: s(row["status"]) as NotificationRow["status"],
+    error: sn(row["error"]),
+    detail: sn(row["detail"]),
+    createdAt: s(row["created_at"]),
+  }));
+}
+
+/** Milestones that have been reached but never announced on the given channel. */
+export function milestonesAwaitingNotification(
+  db: DatabaseSync,
+  channel: string,
+): { milestone: Milestone; goalName: string; reachedOn: string }[] {
+  const rows = db.prepare(
+    `SELECT m.*, g.name AS goal_name
+       FROM milestones m
+       JOIN goals g ON g.id = m.goal_id
+      WHERE m.first_reached_on IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM notifications nf
+           WHERE nf.milestone_id = m.id AND nf.channel = ? AND nf.status = 'sent'
+        )
+      ORDER BY m.first_reached_on ASC, m.amount_nzd ASC`,
+  ).all(channel) as Row[];
+
+  return rows.map((row) => ({
+    milestone: toMilestone(row),
+    goalName: s(row["goal_name"]),
+    reachedOn: s(row["first_reached_on"]),
+  }));
+}
+
+export function stampMilestoneNotified(db: DatabaseSync, milestoneId: number): void {
+  db.prepare("UPDATE milestones SET notified_at = ? WHERE id = ? AND notified_at IS NULL")
+    .run(new Date().toISOString(), milestoneId);
 }

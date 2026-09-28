@@ -46,9 +46,18 @@ export function SyncHealthStrip({
         {health.accounts.map((account) => (
           <div key={account.accountId} className="callout" style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
             <div>
-              <div style={{ fontWeight: 600 }}>{account.accountName}</div>
+              <div style={{ fontWeight: 600 }}>
+                {account.accountName}
+                {!account.inScope && (
+                  <span className="badge" style={{ marginLeft: 8 }}>
+                    not in goal
+                  </span>
+                )}
+              </div>
               <div className="muted tiny">
-                balance refreshed {relativeTime(account.sourceRefreshedAt)}
+                {account.connectionName ?? "unknown provider"}
+                {account.accountType ? ` · ${account.accountType}` : ""} · balance refreshed{" "}
+                {relativeTime(account.sourceRefreshedAt)}
                 {account.ageHours !== null ? ` (${Math.round(account.ageHours)} h old)` : ""}
               </div>
             </div>

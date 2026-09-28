@@ -59,11 +59,15 @@ export interface SyncHealth {
   accounts: {
     accountId: string;
     accountName: string;
+    connectionName: string | null;
+    accountType: string | null;
+    inScope: boolean;
     valueNzd: number;
     status: "ACTIVE" | "INACTIVE";
     sourceRefreshedAt: string | null;
     ageHours: number | null;
   }[];
+  excludedAccounts: string[];
   hasInactive: boolean;
   stale: boolean;
   staleReason: string | null;
@@ -151,6 +155,26 @@ export interface Projection {
   } | null;
 }
 
+export interface Account {
+  accountId: string;
+  accountName: string;
+  connectionName: string | null;
+  accountType: string | null;
+  currency: string;
+  status: "ACTIVE" | "INACTIVE";
+  inScope: boolean;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  latestValue: number | null;
+  latestSnapshotDate: string | null;
+}
+
+export interface AccountList {
+  accounts: Account[];
+  inScopeCount: number;
+  defaultRule: { connectionMatch: string; accountTypes: string[] };
+}
+
 export interface Settings {
   assumptions: { annualReturn: number; monthlyContribution: number };
   source: {
@@ -224,6 +248,12 @@ export const api = {
     return request<Projection>(`/api/projection?${query.toString()}`);
   },
   settings: () => request<Settings>("/api/settings"),
+  accounts: () => request<AccountList>("/api/accounts"),
+  setAccountScope: (accountId: string, inScope: boolean) =>
+    request<{ account: Account }>(`/api/accounts/${encodeURIComponent(accountId)}`, {
+      method: "PATCH",
+      body: JSON.stringify({ inScope }),
+    }),
   syncRuns: () => request<{ runs: SyncRun[] }>("/api/sync/runs"),
 
   updateSettings: (patch: { annualReturn?: number; monthlyContribution?: number }) =>

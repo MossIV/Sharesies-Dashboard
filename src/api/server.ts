@@ -17,6 +17,7 @@ import { migrate } from "../db/migrate.ts";
 import { HttpError } from "./validate.ts";
 import { summaryRoutes } from "./routes/summary.ts";
 import { snapshotRoutes } from "./routes/snapshots.ts";
+import { accountRoutes } from "./routes/accounts.ts";
 import { goalRoutes } from "./routes/goals.ts";
 import { contributionRoutes } from "./routes/contributions.ts";
 import { projectionRoutes } from "./routes/projection.ts";
@@ -53,6 +54,7 @@ export function createApp(db: DatabaseSync): Hono {
 
   app.route("/api", summaryRoutes(db));
   app.route("/api", snapshotRoutes(db));
+  app.route("/api", accountRoutes(db));
   app.route("/api", goalRoutes(db));
   app.route("/api", contributionRoutes(db));
   app.route("/api", projectionRoutes(db));

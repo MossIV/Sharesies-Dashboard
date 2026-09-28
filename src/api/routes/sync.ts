@@ -29,11 +29,13 @@ export function syncRoutes(db: DatabaseSync): Hono {
   app.get("/sync/runs", (c) => c.json({ runs: recentSyncRuns(db, 20) }));
 
   app.get("/health", (c) => {
-    const snapshots = listSnapshots(db);
+    // Diagnostics: count every stored snapshot, not just the in-scope ones.
+    const snapshots = listSnapshots(db, { scope: "all" });
     const health = buildSyncHealth(db, new Date(), todayNz());
     return c.json({
       status: "ok",
       snapshotCount: snapshots.length,
+      inScopeCount: snapshots.filter((snapshot) => !health.excludedAccounts.includes(snapshot.accountId)).length,
       sync: health,
     });
   });

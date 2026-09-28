@@ -10,6 +10,7 @@ import {
   getActiveGoal,
   latestSnapshots,
   latestSyncRun,
+  listAccounts,
   listMilestones,
   listSnapshots,
   netContributions,
@@ -26,6 +27,10 @@ import { getAssumptions } from "./settings.ts";
 export interface AccountHealth {
   accountId: string;
   accountName: string;
+  /** connection.name where known, else the source that produced the row. */
+  connectionName: string | null;
+  accountType: string | null;
+  inScope: boolean;
   valueNzd: number;
   status: "ACTIVE" | "INACTIVE";
   sourceRefreshedAt: string | null;
@@ -42,6 +47,8 @@ export interface SyncHealth {
   daysCollected: number;
   daysSinceLastSnapshot: number | null;
   accounts: AccountHealth[];
+  /** Account ids deliberately excluded from the goal total. */
+  excludedAccounts: string[];
   hasInactive: boolean;
   stale: boolean;
   staleReason: string | null;
@@ -96,21 +103,32 @@ export function trailingChange(series: { date: string; value: number }[], today:
 }
 
 export function buildSyncHealth(db: DatabaseSync, now: Date, today: string): SyncHealth {
-  const latest = latestSnapshots(db);
+  // Every account is listed, including the ones the user excluded: an excluded
+  // KiwiSaver account is still worth seeing, it just does not move the goal.
+  const latest = latestSnapshots(db, { scope: "all" });
   const run = latestSyncRun(db);
-  const history = listSnapshots(db);
+  const history = listSnapshots(db, { scope: "all" });
+  const registry = new Map(listAccounts(db).map((account) => [account.accountId, account]));
 
-  const accounts: AccountHealth[] = latest.map((snapshot) => ({
-    accountId: snapshot.accountId,
-    accountName: snapshot.accountName,
-    valueNzd: snapshot.valueNzd,
-    status: snapshot.status,
-    sourceRefreshedAt: snapshot.sourceRefreshedAt,
-    ageHours: ageHours(snapshot.sourceRefreshedAt, now),
-  }));
+  const accounts: AccountHealth[] = latest.map((snapshot) => {
+    const registered = registry.get(snapshot.accountId);
+    return {
+      accountId: snapshot.accountId,
+      accountName: snapshot.accountName,
+      connectionName: registered?.connectionName ?? snapshot.source,
+      accountType: registered?.accountType ?? null,
+      inScope: registered?.inScope ?? true,
+      valueNzd: snapshot.valueNzd,
+      status: snapshot.status,
+      sourceRefreshedAt: snapshot.sourceRefreshedAt,
+      ageHours: ageHours(snapshot.sourceRefreshedAt, now),
+    };
+  });
 
-  const hasInactive = accounts.some((account) => account.status === "INACTIVE");
-  const staleAges = accounts.map((account) => account.ageHours).filter((age): age is number => age !== null);
+  // Staleness is judged on the accounts that actually feed the goal.
+  const scored = accounts.filter((account) => account.inScope);
+  const hasInactive = scored.some((account) => account.status === "INACTIVE");
+  const staleAges = scored.map((account) => account.ageHours).filter((age): age is number => age !== null);
   const oldestAge = staleAges.length > 0 ? Math.max(...staleAges) : null;
   const lastSnapshotDate = history.at(-1)?.snapshotDate ?? null;
   const daysSince = lastSnapshotDate === null ? null : daysBetween(lastSnapshotDate, today);
@@ -118,9 +136,11 @@ export function buildSyncHealth(db: DatabaseSync, now: Date, today: string): Syn
   let stale = false;
   let staleReason: string | null = null;
 
-  if (accounts.length === 0) {
+  if (scored.length === 0) {
     stale = true;
-    staleReason = "No snapshots yet. Run the collector to start building history.";
+    staleReason = accounts.length === 0
+      ? "No snapshots yet. Run the collector to start building history."
+      : "No accounts are inside the goal scope. Include one on the Accounts card.";
   } else if (hasInactive) {
     stale = true;
     staleReason = "An account is INACTIVE. Reconnect at my.akahu.nz/connections.";
@@ -145,6 +165,7 @@ export function buildSyncHealth(db: DatabaseSync, now: Date, today: string): Syn
     daysCollected: new Set(history.map((snapshot) => snapshot.snapshotDate)).size,
     daysSinceLastSnapshot: daysSince,
     accounts,
+    excludedAccounts: accounts.filter((account) => !account.inScope).map((account) => account.accountId),
     hasInactive,
     stale,
     staleReason,
