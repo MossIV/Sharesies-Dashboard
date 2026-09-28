@@ -12,6 +12,7 @@
     "test:watch": "node --test --watch \"tests/**/*.test.ts\"",
     "migrate": "node src/db/migrate.ts",
     "collect": "node src/collector/run.ts",
+    "import:csv": "node scripts/import-csv.ts",
     "seed:demo": "node scripts/seed-demo.ts",
     "seed:demo:reset": "node scripts/seed-demo.ts --reset",
     "api": "node src/api/server.ts",

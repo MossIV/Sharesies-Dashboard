@@ -5,6 +5,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { PortfolioSource } from "./PortfolioSource.ts";
 import { AkahuSource } from "./AkahuSource.ts";
+import { CsvSource } from "./CsvSource.ts";
 import { ManualSource } from "./ManualSource.ts";
 import { getSetting } from "../db/client.ts";
 
@@ -12,6 +13,16 @@ export function resolveSource(db?: DatabaseSync): PortfolioSource {
   const requested = process.env["PORTFOLIO_SOURCE"]?.trim().toLowerCase();
 
   if (requested === "manual") return manualSource(db);
+  if (requested === "csv") {
+    const filePath = process.env["CSV_FILE"]?.trim();
+    if (!filePath) {
+      throw new Error(
+        "PORTFOLIO_SOURCE=csv but CSV_FILE is not set. Point CSV_FILE at a Sharesies " +
+          "transaction report, or use PORTFOLIO_SOURCE=manual.",
+      );
+    }
+    return new CsvSource({ filePath });
+  }
   if (requested === "akahu") {
     if (!AkahuSource.isConfigured()) {
       throw new Error(
@@ -41,5 +52,5 @@ function manualSource(db?: DatabaseSync): PortfolioSource {
   });
 }
 
-export { AkahuSource, ManualSource };
+export { AkahuSource, CsvSource, ManualSource };
 export type { PortfolioSource };

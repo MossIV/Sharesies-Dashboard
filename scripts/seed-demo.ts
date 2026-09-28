@@ -38,8 +38,12 @@ function rng(seed: number): () => number {
 function reset(db: ReturnType<typeof openDb>): number {
   const snapshots = db.prepare("DELETE FROM snapshots WHERE source = 'demo'").run();
   // Demo contributions carry a `demo:` reference so this can never delete a real
-  // bank or CSV import (those use the provider id or a `csv:` hash).
-  const contributions = db.prepare("DELETE FROM contributions WHERE external_ref LIKE 'demo:%'").run();
+  // bank or CSV import (those use the provider id or a `csv:` hash). The note
+  // match catches rows written before references existed, which would otherwise
+  // linger and inflate the contribution total after a reset.
+  const contributions = db.prepare(
+    "DELETE FROM contributions WHERE external_ref LIKE 'demo:%' OR note = 'Monthly deposit (demo)'",
+  ).run();
   const accounts = db.prepare("DELETE FROM accounts WHERE account_id = ?").run(ACCOUNT_ID);
   return Number(snapshots.changes ?? 0) + Number(contributions.changes ?? 0) + Number(accounts.changes ?? 0);
 }

@@ -1,0 +1,10 @@
+Date,Type,Description,Amount,Balance,Units,Price,Ticker
+2026-01-15,Top up,Top up from bank account,500.00,"1,234.56",,,
+2026-02-15,Top up,"Top up from bank account, monthly",500.00,"1,812.30",,,
+2026-02-18,Buy,Buy Vanguard International Shares Select Exclusions Index Fund,-250.00,"1,562.30",3.1234,80.04,VGS
+2026-03-15,Top up,Top up from bank account,500.00,"2,215.44",,,
+2026-03-20,Dividend,Dividend reinvestment,12.45,"2,227.89",0.1521,81.85,VGS
+2026-04-02,Fee,"Annual fund charge (""management fee"")",-1.35,"2,226.54",,,
+2026-04-15,Withdrawal,Withdrawal to bank account,-200.00,"2,026.54",,,
+2026-04-28,Buy,Buy Smartshares US 500,-300.00,"1,726.54",4.55,65.93,USF
+2026-05-15,Top up,Top up from bank account,750.00,"2,476.54",,,

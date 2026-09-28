@@ -5,6 +5,7 @@ import {
   type AccountList,
   type Contribution,
   type Holdings,
+  type ImportRecord,
   type Projection,
   type Settings,
   type SnapshotSeries,
@@ -14,6 +15,7 @@ import { GoalProgress } from "./components/GoalProgress.tsx";
 import { MilestoneTimeline } from "./components/MilestoneTimeline.tsx";
 import { SyncHealthStrip } from "./components/SyncHealthStrip.tsx";
 import { AccountsCard } from "./components/AccountsCard.tsx";
+import { CsvImportCard } from "./components/CsvImportCard.tsx";
 import { AllocationDonut, ContributionsChart, ProjectionChart, ValueChart } from "./components/Charts.tsx";
 import { ContributionLog } from "./components/ContributionLog.tsx";
 import { SettingsPanel } from "./components/SettingsPanel.tsx";
@@ -23,6 +25,7 @@ interface Data {
   series: SnapshotSeries;
   holdings: Holdings;
   accounts: AccountList;
+  imports: ImportRecord[];
   contributions: { contributions: Contribution[]; total: number; totalAllTime: number };
   projection: Projection;
   settings: Settings;
@@ -36,16 +39,17 @@ export default function App() {
 
   const load = useCallback(async () => {
     try {
-      const [summary, series, holdings, accounts, contributions, projection, settings] = await Promise.all([
+      const [summary, series, holdings, accounts, importLog, contributions, projection, settings] = await Promise.all([
         api.summary(),
         api.snapshots(),
         api.holdings(),
         api.accounts(),
+        api.imports(),
         api.contributions(),
         api.projection({}),
         api.settings(),
       ]);
-      setData({ summary, series, holdings, accounts, contributions, projection, settings });
+      setData({ summary, series, holdings, accounts, imports: importLog.imports, contributions, projection, settings });
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -109,7 +113,7 @@ export default function App() {
     );
   }
 
-  const { summary, series, holdings, accounts, contributions, projection, settings } = data;
+  const { summary, series, holdings, accounts, imports, contributions, projection, settings } = data;
   const health = summary.syncHealth;
 
   return (
@@ -177,6 +181,10 @@ export default function App() {
             await load();
           }}
         />
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <CsvImportCard imports={imports} onApplied={load} />
       </div>
 
       <div className="grid cols-2" style={{ marginBottom: 16 }}>

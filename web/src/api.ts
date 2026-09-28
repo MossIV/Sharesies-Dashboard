@@ -175,6 +175,45 @@ export interface AccountList {
   defaultRule: { connectionMatch: string; accountTypes: string[] };
 }
 
+export interface CsvImportRow {
+  rowNumber: number;
+  date: string | null;
+  description: string;
+  category: string;
+  amountNzd: number;
+  balance: number | null;
+  externalRef: string;
+}
+
+export interface CsvImportResult {
+  mode: "preview" | "apply";
+  selected: CsvImportRow[];
+  transactions: CsvImportRow[];
+  imported: number;
+  skipped: number;
+  importId: number | null;
+  detected: {
+    delimiter: string;
+    columns: Record<string, number | undefined>;
+    unrecognisedColumns: string[];
+    dateFormat: string;
+    dateAmbiguous: boolean;
+    raggedRows: number;
+    counts: Record<string, number>;
+  };
+  warnings: string[];
+}
+
+export interface ImportRecord {
+  id: number;
+  kind: string;
+  filename: string | null;
+  importedAt: string;
+  rowsSeen: number;
+  rowsImported: number;
+  rowsSkipped: number;
+}
+
 export interface Settings {
   assumptions: { annualReturn: number; monthlyContribution: number };
   source: {
@@ -255,6 +294,18 @@ export const api = {
       body: JSON.stringify({ inScope }),
     }),
   syncRuns: () => request<{ runs: SyncRun[] }>("/api/sync/runs"),
+  importSharesiesCsv: (input: {
+    csv: string;
+    filename?: string | null;
+    mode?: "preview" | "apply";
+    categories?: string[];
+    dateFormat?: string;
+  }) =>
+    request<CsvImportResult>("/api/import/sharesies-csv", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  imports: () => request<{ imports: ImportRecord[] }>("/api/imports"),
 
   updateSettings: (patch: { annualReturn?: number; monthlyContribution?: number }) =>
     request<{ assumptions: Settings["assumptions"] }>("/api/settings", {
