@@ -37,9 +37,13 @@ export function str(value: unknown): string | null {
 export function extractItems(payload: unknown): unknown[] {
   if (Array.isArray(payload)) return payload;
   if (isRecord(payload)) {
-    for (const key of ["items", "data", "accounts"]) {
+    // "item" last: a single-resource response (GET /me) uses the singular, while
+    // the list endpoints use "items". Trying the plural keys first means a
+    // response that somehow carries both resolves to the list.
+    for (const key of ["items", "data", "accounts", "item"]) {
       const candidate = payload[key];
       if (Array.isArray(candidate)) return candidate;
+      if (key === "item" && isRecord(candidate)) return [candidate];
     }
   }
   return [];

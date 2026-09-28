@@ -16,3 +16,10 @@ dist/
 
 # Database backups (npm run backup). Local copies of the history, not source.
 backups/
+
+# Raw Akahu captures from `npm run spike`. The credentials, ids, account number
+# and payment reference are redacted, but the balances and every holding are the
+# real ones: a financial statement, not a fixture. They stay on this machine.
+# A sanitized fixture meant for committing is named fixtures/akahu-accounts.sanitized.json.
+fixtures/akahu-accounts.spike-*.json
+fixtures/akahu-accounts.real.json

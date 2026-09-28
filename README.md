@@ -6,12 +6,13 @@ reasoning behind it are in [`docs/sharesies-dashboard-plan.md`](docs/sharesies-d
 decisions taken during the build are recorded in
 [`docs/implementation-notes.md`](docs/implementation-notes.md).
 
-**Status:** Phase 0 through Phase 4 are built. Phases 1-3 (collector, storage, API,
-dashboard, projections, contributions) plus every Phase 4 item: milestone
+**Status:** built and running on live Akahu data. Phase 0 is done — the spike
+confirmed the connection returns holdings, not just a balance, so the allocation
+view has real data. Phases 1-4 are complete, including every Phase 4 item:
 notifications, Sharesies CSV import, bank-transfer detection, widening the goal to
-other accounts, export/backup, and a mobile-friendly layout. The one thing still
-outstanding is Phase 0's real Akahu spike, which needs your tokens: everything runs
-today against the manual source and the demo data.
+other accounts, export/backup, and a mobile-friendly layout. The design decisions
+behind the current setup are recorded in
+[`docs/sharesies-dashboard-plan.md`](docs/sharesies-dashboard-plan.md) section 14.
 
 ---
 
@@ -23,9 +24,10 @@ dependency is [Hono](https://hono.dev).
 
 ```bash
 npm install
-cp .env.example .env        # optional for now; needed for Akahu tokens
+cp .env.example .env        # put your Akahu tokens here
 npm run migrate             # create data/sharesies.db
-npm run seed:demo           # optional: 8 months of clearly-labelled demo history
+npm run spike               # optional: check the Akahu connection and save a fixture
+npm run collect             # one collection pass, the daily job
 npm run api                 # http://127.0.0.1:8787
 ```
 
@@ -33,16 +35,21 @@ Open <http://127.0.0.1:8787>. The API serves the built UI, so no second process 
 needed. For UI development with hot reload, run `npm run api` and `npm run web:dev`
 (Vite on <http://127.0.0.1:5173>, proxying `/api` to the server).
 
-Remove the demo data at any time with `npm run seed:demo:reset`. Demo rows are stored
-with `source = 'demo'` and the dashboard labels them as demo data, so they cannot be
-mistaken for real portfolio figures.
+Every script loads `.env` itself (Node's `--env-file-if-exists`), so no shell
+setup is needed and a missing `.env` falls back to the manual source rather than
+failing. `npm run seed:demo` fills the database with clearly-labelled demo history
+if you want to see the UI populated without tokens; `npm run seed:demo:reset`
+removes it, including the demo goal it creates. Demo rows are stored with
+`source = 'demo'` and labelled in the dashboard, so they cannot be mistaken for
+real portfolio figures.
 
 ### Other commands
 
 | Command | Purpose |
 |---|---|
-| `npm test` | 175 tests (parsing, domain, collector, API, import, notifications, export) on the built-in node:test runner |
+| `npm test` | 189 tests (parsing, domain, collector, API, import, notifications, export) on the built-in node:test runner |
 | `npm run typecheck` | `tsc --noEmit`; the only use for the TypeScript compiler here |
+| `npm run spike` | Call Akahu once, report what came back, save a redacted fixture |
 | `npm run collect` | Run one collection pass, the daily job |
 | `npm run migrate` | Apply any pending SQL migrations |
 | `npm run backup` | Copy the database with `VACUUM INTO` and verify the copy |
@@ -52,33 +59,40 @@ mistaken for real portfolio figures.
 
 ---
 
-## Connecting Akahu (Phase 0)
+## Connecting Akahu (Phase 0 — done)
 
 1. Create an Akahu profile at <https://my.akahu.nz> and connect Sharesies.
 2. On the **Developers** page, create a personal app (free) and copy both tokens.
 3. Put them in `.env`:
 
    ```
-   AKAHU_USER_TOKEN=...    # Authorization: Bearer <this>
-   AKAHU_APP_TOKEN=...     # X-Akahu-Id: <this>
+   AKAHU_USER_TOKEN=...    # the Authorization header value
+   AKAHU_APP_TOKEN=...     # the X-Akahu-Id header value
    ```
 
-4. Verify and inspect the response shape:
+4. Check the connection and inspect the response shape:
 
    ```bash
+   npm run spike
    npm run collect
    curl -s http://127.0.0.1:8787/api/holdings/latest   # does meta.portfolio have data?
    ```
 
-5. **The Phase 0 gate.** If only a balance comes back, the dashboard is value-only:
-   ignore the Allocation card, everything else still works. If `meta.portfolio` has
-   holdings, the allocation donut fills in. The raw payload of every fetch is kept in
-   `raw_fetches`, so a later parser change can be re-run over the history you have
-   already collected.
+**The gate, as it came out:** `meta.portfolio` carries holdings, so the allocation
+donut is populated. Had it returned only a balance, the dashboard would be
+value-only and everything else would still work. The raw payload of every fetch is
+kept in `raw_fetches`, so a later parser change can be re-run over the history you
+have already collected.
+
+`npm run spike` is read-only and redacts the account id, the `_authorisation` and
+`_credentials` references, the account number and the payment reference before
+writing `fixtures/akahu-accounts.spike-<date>.json`. It does **not** redact the
+balances or the holdings: those files are git-ignored on purpose, because a
+financial statement is not a fixture. See the note in `.gitignore`.
 
 Without tokens the app falls back to the **manual source**: enter a value in the
-Settings panel (or `MANUAL_VALUE_NZD` in `.env`) and it records a snapshot, so you can
-start building history immediately.
+Settings panel (or `MANUAL_VALUE_NZD` in `.env`) and it records a snapshot, so you
+can start building history immediately.
 
 ### Scheduling the daily job
 
@@ -109,6 +123,17 @@ SMTP_HOST=smtp.example.com             # email needs these plus SMTP_USER/SMTP_P
 A channel with missing settings is reported on the dashboard rather than silently
 disabling itself, and the **Send a test alert** button proves a channel works
 without consuming a real milestone's only send.
+
+### Phone push, set up
+
+1. Install the **ntfy** app ([ntfy.sh](https://ntfy.sh), iOS/Android, no account).
+2. Subscribe to the topic set in `NOTIFY_NTFY_TOPIC`.
+3. Press **Send a test alert** on the dashboard and confirm the phone buzzes.
+
+The topic name is the only secret: anyone who knows it can read the notifications,
+which is why it is a long random string rather than something guessable. It is in
+`.env`, which is git-ignored. Set `NOTIFY_NTFY_TOKEN` if you later switch to a
+reserved topic on a self-hosted server.
 
 ## Sharesies report import (Phase 4)
 
@@ -154,6 +179,28 @@ git-ignored: a backup in the repo is not a backup.
 
 The dashboard can also export the whole history as JSON or CSV, which is for using
 the data elsewhere rather than for disaster recovery.
+
+---
+
+## Hosting it (localhost now, a NAS container later)
+
+Running locally is the default and nothing needs changing for it. For the NAS:
+
+* **Persist two directories**: `data/` and `backups/`. The database is the only copy
+  of the history, so losing the volume loses the past.
+* **Do not publish the port.** The API has no authentication by design (it is a
+  personal, single-user app). Put it behind the NAS's own access control, or a VPN
+  such as Tailscale. `API_HOST` exists for that case and defaults to `127.0.0.1`.
+* **Keep the container's clock and timezone sane.** Snapshot dates are computed in
+  Pacific/Auckland, so the daily run lands on the right calendar day regardless of
+  where the host thinks it is.
+* **Run the collection on a schedule** (cron in the container, or the NAS scheduler)
+  and `npm run backup` with it. Akahu refreshes connected accounts on its own daily
+  schedule, so one collection a day is enough — do not poll in a loop.
+
+There is no Dockerfile in the repo yet; the image needs Node 24+, `npm ci`, a
+volume for those two directories, and the start command `node --env-file-if-exists=.env
+src/api/server.ts` after `npm run migrate`.
 
 ---
 
