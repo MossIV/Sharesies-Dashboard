@@ -6,9 +6,12 @@
  */
 import type { DatabaseSync } from "node:sqlite";
 import type { PortfolioSource } from "../sources/PortfolioSource.ts";
+import type { Notifier } from "../notify/Notifier.ts";
 import { resolveSource } from "../sources/index.ts";
 import { selectPortfolioAccounts, totalValue } from "./select-accounts.ts";
 import { todayNz } from "../db/client.ts";
+import { buildNotifiers, resolveNotifyConfig } from "../notify/config.ts";
+import { dispatchMilestoneNotifications, type DispatchResult } from "../notify/dispatch.ts";
 import {
   finishSyncRun,
   insertRawFetch,
@@ -32,6 +35,13 @@ export interface CollectResult {
   stale: boolean;
   staleReason: string | null;
   milestonesStamped: number;
+  /** What the milestone announcements did. */
+  notifications: {
+    sent: number;
+    failed: number;
+    /** Channel configuration problems, which are not send failures. */
+    problems: string[];
+  };
   syncRunId: number;
   error: string | null;
   warnings: string[];
@@ -42,6 +52,11 @@ export interface CollectOptions {
   now?: Date;
   /** Override the snapshot date (tests, or seeding a historical point). */
   snapshotDate?: string;
+  /**
+   * Milestone announcements. `false` skips them; an array uses exactly those
+   * notifiers (tests); omitted builds them from the environment.
+   */
+  notify?: Notifier[] | false;
 }
 
 function hoursSince(iso: string, now: Date): number | null {
@@ -81,6 +96,7 @@ export async function collectOnce(
       stale: true,
       staleReason: message,
       milestonesStamped: 0,
+      notifications: { sent: 0, failed: 0, problems: [] },
       syncRunId,
       error: message,
       warnings,
@@ -176,6 +192,27 @@ export async function collectOnce(
     // 6. Stamp any newly reached milestones.
     const milestonesStamped = stampReachedMilestones(db);
 
+    // 6b. Announce them (plan section 10). A channel that fails is recorded per
+    // channel and does not stop the collection: the snapshot is the important
+    // part, and the announcement is retried on the next run.
+    let notifications: DispatchResult | null = null;
+    if (options.notify !== false) {
+      if (Array.isArray(options.notify)) {
+        notifications = await dispatchMilestoneNotifications(db, { notifiers: options.notify });
+      } else {
+        const config = resolveNotifyConfig();
+        const built = buildNotifiers(config);
+        notifications = await dispatchMilestoneNotifications(db, {
+          notifiers: built.notifiers,
+          problems: built.problems,
+        });
+      }
+    }
+
+    for (const failure of notifications?.failed ?? []) {
+      warnings.push(`Could not announce milestone ${failure.milestoneId} on ${failure.channel}: ${failure.error}`);
+    }
+
     // 7. Sync health, judged on the accounts that feed the goal.
     const refreshTimes = scoped
       .map((account) => account.sourceRefreshedAt)
@@ -217,6 +254,11 @@ export async function collectOnce(
       stale,
       staleReason,
       milestonesStamped,
+      notifications: {
+        sent: notifications?.sent.length ?? 0,
+        failed: notifications?.failed.length ?? 0,
+        problems: notifications?.problems ?? [],
+      },
       syncRunId,
       error: null,
       warnings,
@@ -233,6 +275,7 @@ export async function collectOnce(
       stale: true,
       staleReason: message,
       milestonesStamped: 0,
+      notifications: { sent: 0, failed: 0, problems: [] },
       syncRunId,
       error: message,
       warnings,

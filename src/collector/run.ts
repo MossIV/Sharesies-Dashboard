@@ -31,6 +31,12 @@ async function main(): Promise<void> {
     if (result.milestonesStamped > 0) {
       console.log(`Milestones reached: ${result.milestonesStamped}`);
     }
+    if (result.notifications.sent > 0 || result.notifications.failed > 0) {
+      console.log(
+        `Announcements: ${result.notifications.sent} sent, ${result.notifications.failed} failed`,
+      );
+    }
+    for (const problem of result.notifications.problems) console.warn(`Notification config: ${problem}`);
   }
 
   db.close();

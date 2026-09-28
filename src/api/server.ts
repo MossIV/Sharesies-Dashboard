@@ -20,6 +20,7 @@ import { snapshotRoutes } from "./routes/snapshots.ts";
 import { accountRoutes } from "./routes/accounts.ts";
 import { importRoutes } from "./routes/imports.ts";
 import { transferRoutes } from "./routes/transfers.ts";
+import { notificationRoutes } from "./routes/notifications.ts";
 import { goalRoutes } from "./routes/goals.ts";
 import { contributionRoutes } from "./routes/contributions.ts";
 import { projectionRoutes } from "./routes/projection.ts";
@@ -59,6 +60,7 @@ export function createApp(db: DatabaseSync, options: { today?: string } = {}): H
   app.route("/api", accountRoutes(db));
   app.route("/api", importRoutes(db));
   app.route("/api", transferRoutes(db, options.today ?? todayNz()));
+  app.route("/api", notificationRoutes(db));
   app.route("/api", goalRoutes(db));
   app.route("/api", contributionRoutes(db));
   app.route("/api", projectionRoutes(db));
