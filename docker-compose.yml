@@ -16,9 +16,16 @@ services:
     env_file:
       - .env
 
-    # DB_PATH and BACKUP_DIR are set in the image to the paths below; everything
-    # else comes from .env. Don't set DB_PATH here unless you also change the
-    # mount, or the database lands outside the volume and dies with the container.
+    # These two are pinned here on purpose. `env_file` overrides the image's ENV,
+    # so a `DB_PATH=data/sharesies.db` in `.env` (which is exactly right for a
+    # local run) would point the container at /app/data/sharesies.db — inside the
+    # container, outside the volume — and the history would die with the
+    # container. `environment` wins over `env_file`, so the volume paths hold
+    # whatever `.env` says. Change these only together with the mounts below.
+    environment:
+      DB_PATH: /data/sharesies.db
+      BACKUP_DIR: /backups
+
     volumes:
       - ./data:/data
       - ./backups:/backups
@@ -45,6 +52,11 @@ services:
       timeout: 10s
       start_period: 30s
       retries: 3
+
+    # The scheduler finishes an in-flight collection or VACUUM INTO before it
+    # exits, so the grace period is what stops a stop request from interrupting a
+    # backup half way through.
+    stop_grace_period: 30s
 
     # Modest limits: this is a once-a-day job and a personal dashboard, so it
     # should not compete with anything else on the NAS.

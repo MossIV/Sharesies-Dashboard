@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   DEFAULT_TIME_ZONE,
+  createWaiter,
   describeInstant,
   hoursUntil,
   nextRunAfter,
@@ -168,6 +169,52 @@ describe("arguments", () => {
     assert.throws(() => parseArgs(["--minute=60"], {}), /0-59/);
     assert.throws(() => parseArgs(["--keep=0"], {}), /positive integer/);
     assert.throws(() => parseArgs(["--nonsense"], {}), /Unknown argument/);
+  });
+});
+
+describe("the cancellable wait", () => {
+  test("a stop request does not have to outlast the sleep", async () => {
+    // The bug this covers: the scheduler slept in one long timer, so a SIGTERM
+    // only set a flag and the process stayed alive until the timer fired — up to
+    // a minute. `docker stop` waited out its grace period and killed the
+    // container instead of letting it exit.
+    const waiter = createWaiter();
+    const started = Date.now();
+    const pending = waiter.wait(60_000);
+
+    setTimeout(() => waiter.cancel(), 20);
+    await pending;
+
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed < 500, `cancelling should be immediate, took ${elapsed}ms`);
+  });
+
+  test("an uncancelled wait still runs to its full time", async () => {
+    const waiter = createWaiter();
+    const started = Date.now();
+    await waiter.wait(60);
+    assert.ok(Date.now() - started >= 55);
+  });
+
+  test("cancelling with nothing pending is harmless", () => {
+    const waiter = createWaiter();
+    assert.doesNotThrow(() => waiter.cancel());
+  });
+
+  test("cancelling a finished wait does not resolve the next one", async () => {
+    const waiter = createWaiter();
+    await waiter.wait(10);
+    waiter.cancel();
+
+    let finished = false;
+    const pending = waiter.wait(80).then(() => {
+      finished = true;
+    });
+
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(finished, false, "the second wait must not be cut short by the first cancel");
+    await pending;
+    assert.equal(finished, true);
   });
 });
 

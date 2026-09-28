@@ -6,12 +6,13 @@ reasoning behind it are in [`docs/sharesies-dashboard-plan.md`](docs/sharesies-d
 decisions taken during the build are recorded in
 [`docs/implementation-notes.md`](docs/implementation-notes.md).
 
-**Status:** built and running on live Akahu data. Phase 0 is done — the spike
-confirmed the connection returns holdings, not just a balance, so the allocation
-view has real data. Phases 1-4 are complete, including every Phase 4 item:
-notifications, Sharesies CSV import, bank-transfer detection, widening the goal to
-other accounts, export/backup, and a mobile-friendly layout. The design decisions
-behind the current setup are recorded in
+**Status:** built, running on live Akahu data, and containerised. Phase 0 is done —
+the spike confirmed the connection returns holdings, not just a balance, so the
+allocation view has real data. Phases 1-4 are complete, including every Phase 4
+item: notifications, Sharesies CSV import, bank-transfer detection, widening the
+goal to other accounts, export/backup, and a mobile-friendly layout. The daily job
+runs unattended (`npm run schedule`, or the container) and the container is
+verified end to end. The design decisions behind the current setup are recorded in
 [`docs/sharesies-dashboard-plan.md`](docs/sharesies-dashboard-plan.md) section 14.
 
 ---
@@ -48,7 +49,7 @@ real portfolio figures.
 
 | Command | Purpose |
 |---|---|
-| `npm test` | 225 tests (parsing, domain, collector, API, import, notifications, export, scheduling) on the built-in node:test runner |
+| `npm test` | 229 tests (parsing, domain, collector, API, import, notifications, export, scheduling) on the built-in node:test runner |
 | `npm run typecheck` | `tsc --noEmit`; the only use for the TypeScript compiler here |
 | `npm run spike` | Call Akahu once, report what came back, save a redacted fixture |
 | `npm run collect` | Run one collection pass, the daily job |
@@ -223,16 +224,20 @@ docker compose logs -f
 
 The image builds the UI in a first stage and copies only `web/dist` into the
 runtime, which installs the three runtime dependencies and nothing else. One
-container runs both processes: the API in the foreground (so the container's
-liveness means something) and the scheduler beside it, under `tini` so `docker
-compose down` stops both instead of killing the container after a timeout.
+container runs both processes: the API and the scheduler as children of a small
+entrypoint script, under `tini`, so a stop request reaches both and the scheduler
+finishes an in-flight backup before exiting.
 
 Three things to get right:
 
 * **Persist `./data` and `./backups`.** The database is the only copy of the
-  history, so a container-local path dies with the container. Point both at a NAS
-  share, and include the share in whatever the NAS already backs up — a backup on
-  the same disk as the original is not a backup.
+  history, so a container-local path dies with the container. The compose file
+  pins `DB_PATH=/data/sharesies.db` and `BACKUP_DIR=/backups` under
+  `environment:` on purpose: `env_file` overrides the image's own defaults, so
+  leaving it to `.env` (where `DB_PATH=data/sharesies.db` is right for a local
+  run) would put the database at `/app/data` — inside the container, outside the
+  volume. Point the mounts at a NAS share, and include that share in whatever the
+  NAS already backs up; a backup on the same disk as the original is not a backup.
 * **The port is published on loopback only.** The API has no authentication by
   design — it is a single-user app holding your tokens and balances — so reach it
   through the NAS's own proxy or a VPN such as Tailscale, or change the left side
@@ -243,6 +248,14 @@ Three things to get right:
 Two containers would have been the obvious shape and was rejected: two processes
 writing the same SQLite file across a bind mount is a locking risk not worth taking
 with the only copy of the history.
+
+To check it is healthy:
+
+```bash
+docker compose ps                      # should say (healthy)
+docker compose logs --tail 20          # banner, next run time, requests
+docker exec sharesies-dashboard ls -la /data   # the database, on the volume
+```
 
 ---
 

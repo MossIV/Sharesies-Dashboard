@@ -21,7 +21,7 @@ import { migrate } from "../db/migrate.ts";
 import { recentSyncRuns } from "../db/repo.ts";
 import { backupDatabase, DEFAULT_BACKUP_DIR } from "../db/backup.ts";
 import { collectOnce } from "../collector/collect.ts";
-import { DEFAULT_TIME_ZONE, describeInstant, hoursUntil, nextRunAfter } from "./schedule.ts";
+import { DEFAULT_TIME_ZONE, createWaiter, describeInstant, hoursUntil, nextRunAfter } from "./schedule.ts";
 
 /** Wake this often while waiting, so a clock change or a signal is noticed. */
 const WAKE_INTERVAL_MS = 60_000;
@@ -188,8 +188,12 @@ async function main(): Promise<void> {
   }
 
   let stopped = false;
+  const waiter = createWaiter();
   const stop = (signal: string): void => {
     stopped = true;
+    // Cut the pending wait short: a signal should stop the loop now, not when the
+    // next scheduled run comes round.
+    waiter.cancel();
     console.log(`\nReceived ${signal}; stopping after the current wait.`);
   };
   process.on("SIGINT", () => stop("SIGINT"));
@@ -202,9 +206,10 @@ async function main(): Promise<void> {
 
     // Sleep in short steps rather than one long timer: a suspend, a clock change
     // or an NTP correction would otherwise delay the run by an unknown amount.
+    // Each step is cancellable, so a stop request does not have to outlast it.
     while (!stopped && Date.now() < next.getTime()) {
       const remaining = next.getTime() - Date.now();
-      await new Promise((resolve) => setTimeout(resolve, Math.min(remaining, WAKE_INTERVAL_MS)));
+      await waiter.wait(Math.min(remaining, WAKE_INTERVAL_MS));
     }
     if (stopped) break;
 

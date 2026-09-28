@@ -157,3 +157,35 @@ export function describeInstant(instant: Date, timeZone: string = DEFAULT_TIME_Z
 export function hoursUntil(instant: Date, now: Date = new Date()): number {
   return Math.round(((instant.getTime() - now.getTime()) / 3_600_000) * 10) / 10;
 }
+
+/**
+ * A wait that can be cut short.
+ *
+ * The scheduler sleeps until its next run in one long timer, and a signal only
+ * sets a flag. A plain `setTimeout` therefore keeps the process alive until the
+ * timer fires — up to a minute — so `docker stop` would wait out its grace period
+ * and kill the container instead of letting it exit. Cancelling the pending timer
+ * makes the stop immediate.
+ */
+export function createWaiter(): { wait: (ms: number) => Promise<void>; cancel: () => void } {
+  let cancelCurrent: (() => void) | null = null;
+
+  return {
+    wait(ms: number): Promise<void> {
+      return new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          cancelCurrent = null;
+          resolve();
+        }, ms);
+        cancelCurrent = () => {
+          clearTimeout(timer);
+          cancelCurrent = null;
+          resolve();
+        };
+      });
+    },
+    cancel(): void {
+      cancelCurrent?.();
+    },
+  };
+}

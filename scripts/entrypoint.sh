@@ -1,36 +1,49 @@
 #!/bin/sh
-# Run the API in the foreground and the daily job alongside it.
+# Run the API and the daily job together, and stop both on request.
 #
-# The API is the foreground process because it is the one whose liveness means
-# something: if it dies the container should exit and be restarted. The scheduler
-# is a child; if it dies, the API keeps serving and the log says so — a broken
-# daily job is worth seeing rather than hiding behind a restart loop.
+# The API is not `exec`d, deliberately. `exec` would replace this shell and take
+# the signal trap with it: Docker would signal the API, the scheduler would never
+# hear about it, and the container would be killed once the grace period ran out —
+# which is exactly when a half-written backup would hurt. Both run as children
+# instead, this shell stays alive to forward the signal, and it exits with the
+# API's status so the container's liveness still means what it says.
 #
-# SIGTERM stops both, so `docker compose down` does not leave a half-written
-# SQLite transaction or kill the scheduler mid-backup.
+# The scheduler finishes what it is doing before exiting: its own handler sets a
+# flag and the current pass (a collection, a VACUUM INTO) completes first. The
+# grace period in docker-compose.yml is what gives it room to.
 set -eu
 
 echo "Sharesies dashboard"
-echo "  database: ${DB_PATH:-/data/sharesies.db}"
+# Resolve the database path the same way the app does, so the banner cannot say
+# one thing while the server uses another. (It said "data/sharesies.db" while the
+# server opened /app/data/sharesies.db, which hid a database outside the volume.)
+resolved_db=$(node --input-type=module -e "import { resolveDbPath } from './src/db/client.ts'; console.log(resolveDbPath());" 2>/dev/null || echo "${DB_PATH:-unresolved}")
+echo "  database: ${resolved_db}"
 echo "  backups:  ${BACKUP_DIR:-/backups}"
 echo "  schedule: ${SCHEDULE_HOUR_NZ:-7}:$(printf '%02d' "${SCHEDULE_MINUTE_NZ:-0}") ${SCHEDULE_TIME_ZONE:-Pacific/Auckland}"
-
-scheduler_pid=""
-
-shutdown() {
-  echo "Stopping..."
-  if [ -n "$scheduler_pid" ] && kill -0 "$scheduler_pid" 2>/dev/null; then
-    kill -TERM "$scheduler_pid" 2>/dev/null || true
-    wait "$scheduler_pid" 2>/dev/null || true
-  fi
-  exit 0
-}
-trap shutdown TERM INT
 
 node --env-file-if-exists=.env src/scheduler/run.ts &
 scheduler_pid=$!
 
-# If the scheduler exits unexpectedly, say so once instead of letting it vanish.
+node --env-file-if-exists=.env src/api/server.ts &
+api_pid=$!
+
+stopping=0
+
+shutdown() {
+  if [ "$stopping" = "1" ]; then
+    return
+  fi
+  stopping=1
+  echo "Stopping (signal received)."
+  kill -TERM "$scheduler_pid" 2>/dev/null || true
+  kill -TERM "$api_pid" 2>/dev/null || true
+}
+
+trap shutdown TERM INT
+
+# A scheduler that dies should be visible, not silent: the API keeps serving, and
+# the log says what stopped working.
 (
   sleep 5
   if ! kill -0 "$scheduler_pid" 2>/dev/null; then
@@ -38,4 +51,15 @@ scheduler_pid=$!
   fi
 ) &
 
-exec node --env-file-if-exists=.env src/api/server.ts
+# The API is the process whose liveness matters, so its exit ends the container.
+status=0
+wait "$api_pid" || status=$?
+
+if [ "$stopping" = "0" ]; then
+  echo "The API exited on its own; stopping the scheduler too."
+  kill -TERM "$scheduler_pid" 2>/dev/null || true
+fi
+
+wait "$scheduler_pid" 2>/dev/null || true
+echo "Stopped."
+exit "$status"

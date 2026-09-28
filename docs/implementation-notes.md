@@ -118,8 +118,27 @@ back on code that had only ever been run by hand.
 | Two offset candidates, from a day either side of the target | The obvious two-pass guess uses the offset at the guessed instant, which on a transition day already carries the *new* offset — so it can never find the earlier of two valid answers. Ambiguous times resolve to the first occurrence, matching `Temporal`'s "compatible" behaviour; skipped times resolve to the instant after the jump. |
 | No backfill of missed days | Writing today's value into seven past dates would invent history, and honest history is the only reason this database exists. |
 | A failed collection is reported, not fatal | Akahu being briefly unavailable should cost one day, not the scheduler. The backup still runs, because a failed fetch is exactly when yesterday's data matters most. |
-| One container, two processes | Two containers writing the same SQLite file across a bind mount is a locking risk. The API runs in the foreground so the container's liveness means something; `tini` forwards signals so `docker compose down` stops both cleanly. |
+| One container, two processes | Two containers writing the same SQLite file across a bind mount is a locking risk. The API runs in the foreground so the container's liveness means something; `tini` forwards signals so a stop request reaches both. |
 | The image is two stages | The web build needs Vite; the runtime needs three packages. The runtime stage installs only those. |
+| The volume paths are pinned in `docker-compose.yml`, not left to `.env` | `env_file` overrides the image's `ENV`, so `DB_PATH=data/sharesies.db` — which is right for a local run — pointed the container at `/app/data/sharesies.db`, inside the container and outside the volume. `environment` wins over `env_file`, so the paths hold whatever `.env` says. |
+
+### What only the container could have found
+
+Four things were wrong in ways that running the app locally never shows. The first
+build and the first stop found them:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| The build failed at `npm ci` | The Dockerfile copied `web/package.json` but not `web/package-lock.json`, and `npm ci` refuses to run without its own lockfile | Copy both lockfiles |
+| The container ran, collected and backed up happily — into a database inside itself | `env_file` overrides image `ENV`: `.env`'s `DB_PATH=data/sharesies.db` resolved to `/app/data/sharesies.db`, so the mounted volume held the real history while the container wrote a fresh, empty one beside it | Pin `DB_PATH` and `BACKUP_DIR` under `environment:` in the compose file, where they beat `env_file` |
+| The startup banner said `data/sharesies.db` while the server opened `/app/data/sharesies.db` | The banner echoed the environment variable; the app resolves it against the repo root | The entrypoint asks the app for the resolved path, so the banner cannot disagree with the server |
+| `docker stop` took the full 30 second grace period and was killed | The entrypoint `exec`d the API, which replaced the shell and discarded its `trap` — the scheduler never got the signal. Then, even once signalled, the scheduler slept in one 60 second `setTimeout`, so a stop had to outlast the sleep | No `exec`: both processes are children and the shell forwards the signal. The wait is now cancellable, so a stop is immediate; the grace period is only there for an in-flight backup |
+
+That third row is the one worth dwelling on: the container reported `Healthy`, the
+logs showed a successful collection and a verified backup, and every number it
+printed was consistent — while the history it was building was in the wrong place
+and would have vanished with the container. A banner that repeats a configuration
+value is not evidence that the value is the one being used.
 
 Three smaller things this work turned up, each of which had a silent failure mode:
 
@@ -139,14 +158,13 @@ Three smaller things this work turned up, each of which had a silent failure mod
 
 ## Known gaps
 
-* **The container image has not been built.** The Dockerfile and compose file are written
-  and every path they reference is verified to exist, but Docker Desktop was not running
-  on this machine, so `docker compose up --build` has not been run. The scheduler it runs
-  *has* been exercised directly, against live Akahu.
 * **One snapshot of history so far.** Pace, and the 7/30-day change figures, need a few
   days of data before they say anything; until then they are honestly blank.
 * **The scheduler does not backfill missed days.** Deliberate: writing today's value into
   past dates would invent history.
+* **The container is verified on Docker Desktop for Windows**, not yet on the NAS's own
+  Docker. The things most likely to differ there are the bind mounts (a NAS share rather
+  than a local directory) and filesystem locking over that share.
 * **Milestone ETAs use the current goal's assumption set**, not a per-user override per
   request beyond the query parameters `GET /api/projection` already accepts.
 * **No auth on the API.** Intentional for a localhost-only personal app; the container

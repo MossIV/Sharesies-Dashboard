@@ -15,8 +15,10 @@ FROM node:24-alpine AS build
 WORKDIR /app
 
 # Dependencies first: a source edit should not reinstall them.
+# Both lockfiles, not just both manifests: `npm ci` refuses to run without its own
+# lockfile, and `npm --prefix web ci` looks for web/package-lock.json.
 COPY package.json package-lock.json ./
-COPY web/package.json ./web/
+COPY web/package.json web/package-lock.json ./web/
 RUN npm ci && npm --prefix web ci
 
 COPY . .
@@ -25,9 +27,10 @@ RUN npm run web:build
 # -------------------------------------------------------------- runtime stage
 FROM node:24-alpine
 
-# tini reaps the child processes and forwards SIGTERM. Without it the container
-# ignores the signal and Docker has to kill it after a timeout, which is exactly
-# when a half-written backup would be most annoying.
+# tini reaps the child processes and forwards SIGTERM to the entrypoint, which
+# forwards it to both children. Without it the container ignores the signal and
+# Docker has to kill it after a timeout, which is exactly when a half-written
+# backup would be most annoying.
 #
 # tzdata so Pacific/Auckland is real inside the container: the scheduler does its
 # own zone maths, but log timestamps and anything else reading the system clock
