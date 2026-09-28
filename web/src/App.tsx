@@ -16,6 +16,7 @@ import { MilestoneTimeline } from "./components/MilestoneTimeline.tsx";
 import { SyncHealthStrip } from "./components/SyncHealthStrip.tsx";
 import { AccountsCard } from "./components/AccountsCard.tsx";
 import { CsvImportCard } from "./components/CsvImportCard.tsx";
+import { TransferCandidatesCard } from "./components/TransferCandidatesCard.tsx";
 import { AllocationDonut, ContributionsChart, ProjectionChart, ValueChart } from "./components/Charts.tsx";
 import { ContributionLog } from "./components/ContributionLog.tsx";
 import { SettingsPanel } from "./components/SettingsPanel.tsx";
@@ -185,6 +186,10 @@ export default function App() {
 
       <div style={{ marginBottom: 16 }}>
         <CsvImportCard imports={imports} onApplied={load} />
+      </div>
+
+      <div style={{ marginBottom: 16 }}>
+        <TransferCandidatesCard onImported={load} />
       </div>
 
       <div className="grid cols-2" style={{ marginBottom: 16 }}>

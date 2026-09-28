@@ -12,13 +12,14 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
-import { openDb, resolveDbPath } from "../db/client.ts";
+import { openDb, resolveDbPath, todayNz } from "../db/client.ts";
 import { migrate } from "../db/migrate.ts";
 import { HttpError } from "./validate.ts";
 import { summaryRoutes } from "./routes/summary.ts";
 import { snapshotRoutes } from "./routes/snapshots.ts";
 import { accountRoutes } from "./routes/accounts.ts";
 import { importRoutes } from "./routes/imports.ts";
+import { transferRoutes } from "./routes/transfers.ts";
 import { goalRoutes } from "./routes/goals.ts";
 import { contributionRoutes } from "./routes/contributions.ts";
 import { projectionRoutes } from "./routes/projection.ts";
@@ -28,7 +29,7 @@ import { syncRoutes } from "./routes/sync.ts";
 export const DEFAULT_PORT = 8787;
 export const DEFAULT_HOST = "127.0.0.1";
 
-export function createApp(db: DatabaseSync): Hono {
+export function createApp(db: DatabaseSync, options: { today?: string } = {}): Hono {
   const app = new Hono();
 
   // The Vite dev server runs on a different origin, so it needs CORS. The
@@ -57,6 +58,7 @@ export function createApp(db: DatabaseSync): Hono {
   app.route("/api", snapshotRoutes(db));
   app.route("/api", accountRoutes(db));
   app.route("/api", importRoutes(db));
+  app.route("/api", transferRoutes(db, options.today ?? todayNz()));
   app.route("/api", goalRoutes(db));
   app.route("/api", contributionRoutes(db));
   app.route("/api", projectionRoutes(db));

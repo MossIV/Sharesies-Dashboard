@@ -214,6 +214,42 @@ export interface ImportRecord {
   rowsSkipped: number;
 }
 
+export interface TransferCandidate {
+  externalRef: string;
+  transactionId: string | null;
+  date: string;
+  description: string;
+  amountNzd: number;
+  direction: "in" | "out";
+  contributionAmount: number;
+  type: string | null;
+  merchant: string | null;
+  category: string | null;
+  accountName: string | null;
+  confidence: "high" | "medium";
+  reason: string;
+  alreadyImported: boolean;
+}
+
+export interface TransferScanResult {
+  window: { from: string; to: string };
+  pages: number;
+  keywords: string[];
+  summary: {
+    examined: number;
+    matched: number;
+    internal: number;
+    unmatched: number;
+    unusable: number;
+    proposed: number;
+    new: number;
+    alreadyImported: number;
+  };
+  candidates: TransferCandidate[];
+  skipped: { transactionId: string | null; date: string | null; description: string; amount: number | null; reason: string }[];
+  warnings: string[];
+}
+
 export interface Settings {
   assumptions: { annualReturn: number; monthlyContribution: number };
   source: {
@@ -306,6 +342,18 @@ export const api = {
       body: JSON.stringify(input),
     }),
   imports: () => request<{ imports: ImportRecord[] }>("/api/imports"),
+  scanTransfers: (window: { from?: string; to?: string }) =>
+    request<TransferScanResult>("/api/transfers/scan", {
+      method: "POST",
+      body: JSON.stringify(window),
+    }),
+  confirmTransfers: (
+    transactions: { externalRef: string; date: string; amountNzd: number; description?: string }[],
+  ) =>
+    request<{ imported: number; skipped: number }>("/api/transfers/confirm", {
+      method: "POST",
+      body: JSON.stringify({ transactions }),
+    }),
 
   updateSettings: (patch: { annualReturn?: number; monthlyContribution?: number }) =>
     request<{ assumptions: Settings["assumptions"] }>("/api/settings", {

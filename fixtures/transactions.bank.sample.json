@@ -1,0 +1,117 @@
+{
+  "success": true,
+  "items": [
+    {
+      "_id": "txn_anz_0001",
+      "_account": "acc_anz_everyday_0001",
+      "_connection": "conn_anz_0001",
+      "date": "2026-09-01T00:00:00.000Z",
+      "description": "SHARESIES INVESTMENTS",
+      "amount": -400,
+      "balance": 1887.42,
+      "type": "DIRECT DEBIT",
+      "merchant": null,
+      "category": null,
+      "meta": {
+        "particulars": "SHARESIES",
+        "code": "INV",
+        "reference": "WABEN WONG"
+      }
+    },
+    {
+      "_id": "txn_anz_0002",
+      "_account": "acc_anz_everyday_0001",
+      "_connection": "conn_anz_0001",
+      "date": "2026-09-02T00:00:00.000Z",
+      "description": "Countdown Mt Eden",
+      "amount": -86.5,
+      "balance": 1800.92,
+      "type": "EFTPOS"
+    },
+    {
+      "_id": "txn_anz_0003",
+      "_account": "acc_anz_everyday_0001",
+      "_connection": "conn_anz_0001",
+      "date": "2026-09-05T00:00:00.000Z",
+      "description": "TRANSFER TO 12-3456-7890123-00 SHARESIES",
+      "amount": -250,
+      "balance": 1550.92,
+      "type": "TRANSFER"
+    },
+    {
+      "_id": "txn_anz_0004",
+      "_account": "acc_anz_everyday_0001",
+      "_connection": "conn_anz_0001",
+      "date": "2026-09-08T00:00:00.000Z",
+      "description": "Employer salary",
+      "amount": 2450.12,
+      "balance": 4001.04,
+      "type": "DIRECT CREDIT"
+    },
+    {
+      "_id": "txn_anz_0005",
+      "_account": "acc_anz_everyday_0001",
+      "_connection": "conn_anz_0001",
+      "date": "2026-09-12T00:00:00.000Z",
+      "description": "SHARESIES WITHDRAWAL",
+      "amount": 120.75,
+      "balance": 4121.79,
+      "type": "DIRECT CREDIT"
+    },
+    {
+      "_id": "txn_anz_0006",
+      "_account": "acc_anz_everyday_0001",
+      "_connection": "conn_anz_0001",
+      "date": "2026-09-14T00:00:00.000Z",
+      "description": "SHARESIES   INVESTMENTS  NZ",
+      "amount": -400,
+      "balance": 3721.79,
+      "type": "STANDING ORDER"
+    },
+    {
+      "_id": "txn_anz_0007",
+      "_account": "acc_anz_everyday_0001",
+      "_connection": "conn_anz_0001",
+      "date": "2026-09-20T00:00:00.000Z",
+      "description": "",
+      "amount": -50,
+      "balance": 3671.79,
+      "type": "PAYMENT",
+      "merchant": { "name": "Sharesies Limited" },
+      "category": { "name": "Investments" }
+    },
+    {
+      "_id": "txn_anz_0008",
+      "_account": "acc_anz_everyday_0001",
+      "_connection": "conn_anz_0001",
+      "date": "2026-09-22T00:00:00.000Z",
+      "description": "Power bill",
+      "amount": -180.4,
+      "balance": 3491.39,
+      "type": "DIRECT DEBIT"
+    },
+    {
+      "_id": "txn_sharesies_0001",
+      "_account": "acc_sharesies_wallet_0001",
+      "_connection": "conn_sharesies_0001",
+      "date": "2026-09-14T00:00:00.000Z",
+      "description": "Top up from bank",
+      "amount": 400,
+      "balance": 412.15,
+      "type": "CREDIT"
+    },
+    {
+      "_id": "txn_sharesies_0002",
+      "_account": "acc_sharesies_investment_0001",
+      "_connection": "conn_sharesies_0001",
+      "date": "2026-09-15T00:00:00.000Z",
+      "description": "Buy Vanguard International Shares",
+      "amount": -400,
+      "balance": 18432.55,
+      "type": "DEBIT"
+    }
+  ],
+  "cursor": {
+    "next": null
+  }
+}

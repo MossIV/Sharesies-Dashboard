@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import {
   buildImportPlan,
   classifyRow,
+  contributionAmount,
   detectColumns,
   detectDateFormat,
   importableRows,
@@ -194,7 +195,23 @@ describe("buildImportPlan on the sample report", () => {
     const rows = importableRows(plan, { categories: ["deposit", "buy"] });
     assert.equal(rows.length, 6);
     const buy = rows.find((row) => row.category === "buy");
-    assert.equal(buy?.amountNzd, 250, "a -250 buy becomes a 250 contribution");
+    assert.equal(buy?.amountNzd, 250, "a -250 buy is money entering the portfolio");
+  });
+
+  test("a withdrawal stays negative, because the log's total is net contributions", () => {
+    const [row] = importableRows(plan, { categories: ["withdrawal"] });
+    assert.equal(row?.amountNzd, -200);
+
+    const [fee] = importableRows(plan, { categories: ["fee"] });
+    assert.equal(fee?.amountNzd, -1.35);
+  });
+
+  test("a sell is money leaving the portfolio", () => {
+    assert.equal(contributionAmount("sell", -300), -300);
+    assert.equal(contributionAmount("deposit", 300), 300);
+    // Direction is not guessed for rows whose category says nothing about it.
+    assert.equal(contributionAmount("transfer", -300), -300);
+    assert.equal(contributionAmount("unknown", 300), 300);
   });
 
   test("references are stable across re-imports of the same file", () => {

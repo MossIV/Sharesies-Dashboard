@@ -406,6 +406,36 @@ const EMPTY_COUNTS = (): Record<RowCategory, number> => ({
   deposit: 0, withdrawal: 0, buy: 0, sell: 0, dividend: 0, fee: 0, interest: 0, transfer: 0, unknown: 0,
 });
 
+/**
+ * The sign a contribution should carry, given the row's category.
+ *
+ * The log's total is net contributions, so direction matters: a deposit or a buy
+ * is money entering the portfolio (+), while a withdrawal or a sell is money
+ * leaving it (-). A withdrawal imported as an absolute value would silently
+ * inflate net contributions, which is exactly the kind of error that is
+ * invisible on a chart.
+ *
+ * Transfers and unrecognised rows keep the file's own sign, because guessing
+ * their direction from the category alone is not possible.
+ */
+export function contributionAmount(category: RowCategory, rawAmount: number): number {
+  const magnitude = Math.round(Math.abs(rawAmount) * 100) / 100;
+
+  switch (category) {
+    case "deposit":
+    case "buy":
+    case "dividend":
+    case "interest":
+      return magnitude;
+    case "withdrawal":
+    case "sell":
+    case "fee":
+      return -magnitude;
+    default:
+      return Math.round(rawAmount * 100) / 100;
+  }
+}
+
 export interface PlanOptions {
   /** Categories to treat as contributions. Default: deposits only. */
   categories?: RowCategory[];
@@ -481,7 +511,7 @@ export function buildImportPlan(parsed: ParsedCsv, options: PlanOptions = {}): I
     if (dateResult.date === null) problem = "Could not read the date.";
     else if (rawAmount === null) problem = "Could not read the amount.";
 
-    const amountNzd = rawAmount === null ? 0 : Math.round(Math.abs(rawAmount) * 100) / 100;
+    const amountNzd = rawAmount === null ? 0 : contributionAmount(category, rawAmount);
 
     candidates.push({
       externalRef: hashRef([

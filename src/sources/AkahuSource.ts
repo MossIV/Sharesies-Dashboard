@@ -9,7 +9,8 @@
  * 100 ms base with random jitter, on 429 and on 5xx.
  */
 import type { FetchResult, PortfolioSource } from "./PortfolioSource.ts";
-import { normalizeAccounts } from "./parse-akahu.ts";
+import { extractItems, normalizeAccounts } from "./parse-akahu.ts";
+import { nextCursor } from "./parse-transactions.ts";
 
 export const AKAHU_BASE_URL = "https://api.akahu.io/v1";
 const RETRY_BACKOFF_BASE_MS = 100;
@@ -180,6 +181,65 @@ export class AkahuSource implements PortfolioSource {
       raw,
       accounts: normalizeAccounts(raw),
     };
+  }
+
+  /**
+   * One page of `GET /transactions`.
+   *
+   * `start`/`end` are inclusive ISO dates. Akahu returns only what it has already
+   * refreshed, so a scan can come back empty on a fresh connection.
+   */
+  async fetchTransactionsPage(
+    options: { from?: string | undefined; to?: string | undefined; cursor?: string | undefined } = {},
+  ): Promise<{ items: unknown[]; next: string | null; raw: unknown; path: string }> {
+    const params = new URLSearchParams();
+    if (options.from) params.set("start", options.from);
+    if (options.to) params.set("end", options.to);
+    if (options.cursor) params.set("cursor", options.cursor);
+
+    const path = `/transactions${params.size > 0 ? `?${params.toString()}` : ""}`;
+    const raw = await this.request(path);
+    return { items: extractItems(raw), next: nextCursor(raw), raw, path };
+  }
+
+  /**
+   * Every page of `GET /transactions` for a window.
+   *
+   * Pagination is bounded: a cursor that repeats, or a page count above the cap,
+   * stops the walk instead of looping forever against a live API.
+   */
+  async fetchTransactions(
+    options: { from?: string | undefined; to?: string | undefined; maxPages?: number } = {},
+  ): Promise<{ items: unknown[]; pages: number; raw: unknown[] }> {
+    const maxPages = options.maxPages ?? 20;
+    const items: unknown[] = [];
+    const raw: unknown[] = [];
+    const seen = new Set<string>();
+    let cursor: string | undefined;
+    let pages = 0;
+
+    for (let page = 0; page < maxPages; page++) {
+      const result: Awaited<ReturnType<AkahuSource["fetchTransactionsPage"]>> =
+        await this.fetchTransactionsPage({
+          from: options.from,
+          to: options.to,
+          ...(cursor === undefined ? {} : { cursor }),
+        });
+
+      items.push(...result.items);
+      raw.push(result.raw);
+      pages += 1;
+
+      if (result.next === null) break;
+      if (seen.has(result.next)) {
+        this.#log(`stopping transaction paging: cursor repeated (${result.next})`);
+        break;
+      }
+      seen.add(result.next);
+      cursor = result.next;
+    }
+
+    return { items, pages, raw };
   }
 
   async getMe<T = unknown>(): Promise<T> {
