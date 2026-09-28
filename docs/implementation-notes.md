@@ -105,18 +105,51 @@ Checked rather than assumed, because the plan flagged these as "re-check in Phas
   collector falls back to it and treats a missing timestamp as "freshness unknown"
   (flagged stale, not silently trusted).
 
+## The unattended job, and what the container changed
+
+The plan's Phase 1 says "done when the job runs unattended for a week", and the
+hosting decision is a container on a NAS. Both were built last, and both pushed
+back on code that had only ever been run by hand.
+
+| Decision | Why |
+|---|---|
+| A long-running `npm run schedule` rather than cron | The target is a container on a NAS: cron inside one needs a process manager, and the NAS's scheduler usually cannot reach inside it. One command works the same on Windows, in the container, and on the NAS host. |
+| The run time is a wall clock in a zone, not an interval | New Zealand shifts its clocks twice a year, so 07:00 is 23 hours after the previous run on the last Sunday in September and 25 hours after on the first Sunday in April. Adding 24 hours to an instant misses a day every September and double-collects every April. |
+| Two offset candidates, from a day either side of the target | The obvious two-pass guess uses the offset at the guessed instant, which on a transition day already carries the *new* offset — so it can never find the earlier of two valid answers. Ambiguous times resolve to the first occurrence, matching `Temporal`'s "compatible" behaviour; skipped times resolve to the instant after the jump. |
+| No backfill of missed days | Writing today's value into seven past dates would invent history, and honest history is the only reason this database exists. |
+| A failed collection is reported, not fatal | Akahu being briefly unavailable should cost one day, not the scheduler. The backup still runs, because a failed fetch is exactly when yesterday's data matters most. |
+| One container, two processes | Two containers writing the same SQLite file across a bind mount is a locking risk. The API runs in the foreground so the container's liveness means something; `tini` forwards signals so `docker compose down` stops both cleanly. |
+| The image is two stages | The web build needs Vite; the runtime needs three packages. The runtime stage installs only those. |
+
+Three smaller things this work turned up, each of which had a silent failure mode:
+
+* **A blank `DB_PATH` resolved to the repository root.** `resolve(REPO_ROOT, "")` is
+  `REPO_ROOT`, so SQLite would have tried to open a directory as a database file. The
+  example `.env` ships `DB_PATH=` with nothing after it, so this was one `cp` away for
+  anyone. A blank value now means "not set", for `DB_PATH` and `BACKUP_DIR` alike, and
+  the same helper is exported so the rule can be tested without touching a real backup
+  directory.
+* **`engines` said Node `>=24.0.0`, but `import.meta.main` arrived in 24.2.** On 24.0 or
+  24.1 every entry point would have run nothing and exited 0 — `npm run collect`
+  reporting success while collecting nothing. The requirement is corrected and a check
+  in `client.ts` (imported by every entry point) fails loudly instead.
+* **Backing up an unmigrated database crashed the verification** with a raw
+  `no such table: snapshots`. The integrity check is the authoritative signal; the row
+  count is a convenience, so it now reports `-1` rather than failing a readable copy.
+
 ## Known gaps
 
-* **Nothing schedules the daily job for you.** The plan's Task Scheduler / cron snippet in
-  the README is the whole mechanism, and `npm run backup` needs the same treatment or the
-  backups only exist when you remember. This is the next thing to do for the NAS.
-* **No Dockerfile yet.** Hosting in a NAS container is decided but not built; the README
-  says what the image needs.
+* **The container image has not been built.** The Dockerfile and compose file are written
+  and every path they reference is verified to exist, but Docker Desktop was not running
+  on this machine, so `docker compose up --build` has not been run. The scheduler it runs
+  *has* been exercised directly, against live Akahu.
 * **One snapshot of history so far.** Pace, and the 7/30-day change figures, need a few
   days of data before they say anything; until then they are honestly blank.
+* **The scheduler does not backfill missed days.** Deliberate: writing today's value into
+  past dates would invent history.
 * **Milestone ETAs use the current goal's assumption set**, not a per-user override per
   request beyond the query parameters `GET /api/projection` already accepts.
-* **No auth on the API.** Intentional for a localhost-only personal app; revisit if it is
-  ever bound to a non-loopback address.
+* **No auth on the API.** Intentional for a localhost-only personal app; the container
+  publishes the port on loopback for the same reason.
 * **`web/dist` is not committed**, so `npm run web:build` is required before the API can
-  serve the UI (the API says so in plain text at `/` if it is missing).
+  serve the UI (the API says so in plain text at `/` if it is missing; the image builds it).

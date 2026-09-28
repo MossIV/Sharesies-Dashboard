@@ -1,0 +1,25 @@
+# Things the image must not carry.
+#
+# The database and its backups are deliberately excluded: they are the history and
+# they belong on the mounted volume, not baked into a layer. `.env` holds the
+# Akahu tokens and the ntfy topic, and is passed in at run time instead.
+data/
+backups/
+.env
+.env.*
+!.env.example
+
+# Raw Akahu captures: redacted, but they still hold real balances.
+fixtures/akahu-accounts.spike-*.json
+fixtures/akahu-accounts.real.json
+
+node_modules/
+web/node_modules/
+web/dist/
+dist/
+.git/
+.gitignore
+*.log
+docs/
+tests/
+.hermes/

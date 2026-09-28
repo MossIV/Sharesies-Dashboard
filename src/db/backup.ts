@@ -15,6 +15,15 @@ import { REPO_ROOT, openDb } from "./client.ts";
 export const DEFAULT_BACKUP_DIR = join(REPO_ROOT, "backups");
 export const DEFAULT_KEEP = 14;
 
+/**
+ * Where backups go. A blank value means "not set" — resolving it would put the
+ * copies in the current working directory, which in a container is the app
+ * directory itself, and in a CLI run is wherever you happened to be.
+ */
+export function resolveBackupDir(dir?: string): string {
+  return resolve(dir?.trim() || DEFAULT_BACKUP_DIR);
+}
+
 export interface BackupResult {
   path: string;
   bytes: number;
@@ -45,7 +54,7 @@ export function backupDatabase(
   db: DatabaseSync,
   options: { dir?: string; keep?: number; now?: Date; label?: string } = {},
 ): BackupResult {
-  const dir = resolve(options.dir ?? DEFAULT_BACKUP_DIR);
+  const dir = resolveBackupDir(options.dir);
   const keep = options.keep ?? DEFAULT_KEEP;
   const now = options.now ?? new Date();
 
@@ -61,12 +70,20 @@ export function backupDatabase(
   // Verify by opening the copy, not the original.
   const copy = openDb({ path });
   let integrity = "unknown";
+  // -1 means "could not be counted", which is what an unmigrated source looks
+  // like. The integrity check is the authoritative signal; the count is a
+  // convenience, and failing the whole backup over it would report a readable
+  // copy as broken.
   let snapshots = -1;
   try {
     const row = copy.prepare("PRAGMA integrity_check").get() as { integrity_check?: string } | undefined;
     integrity = row?.integrity_check ?? "unknown";
-    const count = copy.prepare("SELECT COUNT(*) AS count FROM snapshots").get() as { count?: number } | undefined;
-    snapshots = Number(count?.count ?? 0);
+    try {
+      const count = copy.prepare("SELECT COUNT(*) AS count FROM snapshots").get() as { count?: number } | undefined;
+      snapshots = Number(count?.count ?? 0);
+    } catch {
+      // No schema to count: leave the -1 above and let the caller decide.
+    }
   } finally {
     copy.close();
   }
@@ -90,7 +107,15 @@ export function pruneBackups(dir: string, keep: number): string[] {
   return excess;
 }
 
-export function listBackups(dir = DEFAULT_BACKUP_DIR): { name: string; bytes: number; modified: string }[] {
+export interface BackupFile {
+  name: string;
+  /** Absolute path, so a caller never has to rebuild it from the directory. */
+  path: string;
+  bytes: number;
+  modified: string;
+}
+
+export function listBackups(dir = DEFAULT_BACKUP_DIR): BackupFile[] {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
     .filter((name) => name.startsWith("sharesies-") && name.endsWith(".db"))
@@ -98,6 +123,6 @@ export function listBackups(dir = DEFAULT_BACKUP_DIR): { name: string; bytes: nu
     .reverse()
     .map((name) => {
       const stats = statSync(join(dir, name));
-      return { name, bytes: stats.size, modified: stats.mtime.toISOString() };
+      return { name, path: join(dir, name), bytes: stats.size, modified: stats.mtime.toISOString() };
     });
 }

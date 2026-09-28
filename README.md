@@ -18,9 +18,10 @@ behind the current setup are recorded in
 
 ## Quick start
 
-Requires **Node 24 or newer** (Node 26 recommended). There is no build step: TypeScript
-runs directly on the Node runtime, and SQLite is built into Node, so the only runtime
-dependency is [Hono](https://hono.dev).
+Requires **Node 24.2 or newer** (Node 26 recommended) — 24.2 is where `import.meta.main`
+landed, and every command here is an `import.meta.main` entry point that would otherwise
+silently do nothing. There is no build step: TypeScript runs directly on the Node runtime,
+and SQLite is built into Node, so the only runtime dependency is [Hono](https://hono.dev).
 
 ```bash
 npm install
@@ -47,10 +48,11 @@ real portfolio figures.
 
 | Command | Purpose |
 |---|---|
-| `npm test` | 189 tests (parsing, domain, collector, API, import, notifications, export) on the built-in node:test runner |
+| `npm test` | 225 tests (parsing, domain, collector, API, import, notifications, export, scheduling) on the built-in node:test runner |
 | `npm run typecheck` | `tsc --noEmit`; the only use for the TypeScript compiler here |
 | `npm run spike` | Call Akahu once, report what came back, save a redacted fixture |
 | `npm run collect` | Run one collection pass, the daily job |
+| `npm run schedule` | Collect and back up daily, unattended (the NAS job) |
 | `npm run migrate` | Apply any pending SQL migrations |
 | `npm run backup` | Copy the database with `VACUUM INTO` and verify the copy |
 | `npm run import:csv` | Import a Sharesies transaction report (`-- --file path.csv --apply`) |
@@ -99,10 +101,35 @@ can start building history immediately.
 Akahu refreshes connected accounts on its own daily schedule, so one collection a day
 is enough. Do not poll in a loop.
 
-* **Windows:** Task Scheduler, daily, action `node src/collector/run.ts` with *Start in*
-  set to the repo root.
-* **Linux / macOS:** `0 7 * * * cd /path/to/repo && node src/collector/run.ts`
-  (or a systemd timer).
+```bash
+npm run schedule                  # collect + back up daily at 07:00 NZ, and stay running
+npm run schedule -- --hour 6      # a different time
+npm run schedule -- --once        # one pass now, for a smoke test
+```
+
+The scheduler is a long-running command rather than a cron entry because the target
+is a container on a NAS, where cron needs a process manager and the NAS's own
+scheduler usually cannot reach inside the container. It runs in the same container
+as the API; see below.
+
+Two things it does deliberately:
+
+* **The run is 23 or 25 hours after the previous one twice a year.** New Zealand
+  changes its clocks on the last Sunday in September and the first Sunday in April,
+  and a daily 07:00 run lands on 07:00 local on both days. Adding 24 hours to an
+  instant misses a day once a year and collects twice on another.
+* **It does not backfill.** If the machine was off for a week, that week has no
+  snapshots. Writing today's value into seven past dates would be inventing history.
+
+If you would rather use the system's own scheduler:
+
+* **Windows:** Task Scheduler, daily, action `npm run collect` with *Start in* set to
+  the repo root. `npm run backup` likewise, or run `npm run schedule` and let it live
+  in a console window.
+* **Linux / macOS:** `0 7 * * * cd /path/to/repo && npm run collect` (or a systemd
+  timer), plus a backup entry.
+
+Either way the API is a separate process: `npm run api`.
 
 ---
 
@@ -182,25 +209,40 @@ the data elsewhere rather than for disaster recovery.
 
 ---
 
-## Hosting it (localhost now, a NAS container later)
+## Hosting it (localhost now, a NAS container)
 
-Running locally is the default and nothing needs changing for it. For the NAS:
+Running locally is the default and nothing needs changing for it.
 
-* **Persist two directories**: `data/` and `backups/`. The database is the only copy
-  of the history, so losing the volume loses the past.
-* **Do not publish the port.** The API has no authentication by design (it is a
-  personal, single-user app). Put it behind the NAS's own access control, or a VPN
-  such as Tailscale. `API_HOST` exists for that case and defaults to `127.0.0.1`.
-* **Keep the container's clock and timezone sane.** Snapshot dates are computed in
-  Pacific/Auckland, so the daily run lands on the right calendar day regardless of
-  where the host thinks it is.
-* **Run the collection on a schedule** (cron in the container, or the NAS scheduler)
-  and `npm run backup` with it. Akahu refreshes connected accounts on its own daily
-  schedule, so one collection a day is enough — do not poll in a loop.
+For the NAS there is a `Dockerfile` and a `docker-compose.yml`:
 
-There is no Dockerfile in the repo yet; the image needs Node 24+, `npm ci`, a
-volume for those two directories, and the start command `node --env-file-if-exists=.env
-src/api/server.ts` after `npm run migrate`.
+```bash
+cp .env.example .env          # tokens, ntfy topic, schedule
+docker compose up -d --build
+docker compose logs -f
+```
+
+The image builds the UI in a first stage and copies only `web/dist` into the
+runtime, which installs the three runtime dependencies and nothing else. One
+container runs both processes: the API in the foreground (so the container's
+liveness means something) and the scheduler beside it, under `tini` so `docker
+compose down` stops both instead of killing the container after a timeout.
+
+Three things to get right:
+
+* **Persist `./data` and `./backups`.** The database is the only copy of the
+  history, so a container-local path dies with the container. Point both at a NAS
+  share, and include the share in whatever the NAS already backs up — a backup on
+  the same disk as the original is not a backup.
+* **The port is published on loopback only.** The API has no authentication by
+  design — it is a single-user app holding your tokens and balances — so reach it
+  through the NAS's own proxy or a VPN such as Tailscale, or change the left side
+  of the port mapping deliberately.
+* **`API_HOST` is `0.0.0.0` inside the container** (it has to be, for the port
+  mapping to work) and `127.0.0.1` outside it. Nothing else assumes a host.
+
+Two containers would have been the obvious shape and was rejected: two processes
+writing the same SQLite file across a bind mount is a locking risk not worth taking
+with the only copy of the history.
 
 ---
 

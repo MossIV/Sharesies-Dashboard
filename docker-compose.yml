@@ -1,0 +1,61 @@
+# The dashboard, with the daily job beside it.
+#
+#   docker compose up -d --build
+#   docker compose logs -f
+#
+# Copy `.env.example` to `.env` first: the tokens, the ntfy topic and the schedule
+# all come from there, and it is git-ignored so it never travels with the image.
+
+services:
+  dashboard:
+    build: .
+    image: sharesies-dashboard:latest
+    container_name: sharesies-dashboard
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    # DB_PATH and BACKUP_DIR are set in the image to the paths below; everything
+    # else comes from .env. Don't set DB_PATH here unless you also change the
+    # mount, or the database lands outside the volume and dies with the container.
+    volumes:
+      - ./data:/data
+      - ./backups:/backups
+
+    ports:
+      # Loopback only. The API has no authentication by design — it is a
+      # single-user app holding your tokens and your balances — so it is not
+      # published to the network until you deliberately say so. On a NAS, either
+      # change the left side to the NAS's LAN address (and keep it off the
+      # internet), or leave this and reach it through the NAS's own proxy or a
+      # VPN such as Tailscale.
+      - "127.0.0.1:8787:8787"
+
+    # The scheduler and the API are one container on purpose: two containers
+    # writing the same SQLite file over a bind mount is a locking risk that is not
+    # worth taking with the only copy of the history.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8787/api/summary').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 60s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+    # Modest limits: this is a once-a-day job and a personal dashboard, so it
+    # should not compete with anything else on the NAS.
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+# On a NAS the two bind mounts above are the whole persistence story:
+#   ./data     — the SQLite database, the only copy of the history
+#   ./backups  — timestamped copies, pruned to BACKUP_KEEP
+# Point them at a NAS share rather than a container-local path, and include the
+# share in whatever the NAS already backs up. A backup on the same disk as the
+# original is not a backup.

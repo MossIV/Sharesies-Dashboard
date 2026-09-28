@@ -285,10 +285,12 @@ kept so the reasoning stays visible.
    deposit log, and Akahu cannot see Sharesies trades, so the contribution log
    starts empty and fills from the transaction report or bank-transfer detection.
 4. **Hosting:** **a container on the NAS**, but localhost for now while it is being
-   tested. Nothing in the app assumes localhost except the default `API_HOST`; the
-   container needs the volume mounted for `data/` (the only copy of the history) and
-   `backups/`, and should sit behind the NAS's own access control rather than being
-   published to the internet (section 12).
+   tested. This is now built: `Dockerfile` + `docker-compose.yml`, one container running
+   the API and the daily job together, with `data/` and `backups/` as the only things that
+   must be persisted. The port is published on loopback by default, because the app has no
+   authentication and holds the tokens. Two containers was the obvious shape and was
+   rejected: two processes writing one SQLite file across a bind mount is a locking risk
+   not worth taking with the only copy of the history.
 5. **Stack:** **TypeScript**, as recommended. Node runs it directly with no build
    step; `tsc` is only used for `--noEmit` typechecking.
 6. **Notifications:** **yes, phone push.** Delivered through `ntfy.sh` on a topic

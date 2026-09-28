@@ -2,13 +2,33 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 
+/**
+ * Every entry point in this repo ends with `if (import.meta.main) main()`, and
+ * `import.meta.main` was only added in Node 24.2. On 24.0 or 24.1 it is
+ * `undefined`, so a script would import its modules, run nothing and exit 0 —
+ * `npm run collect` reporting success while collecting nothing. client.ts is
+ * imported by every entry point, so the check lives here and fails loudly.
+ */
+if (typeof import.meta.main !== "boolean") {
+  throw new Error(
+    `This project needs Node 24.2 or newer (found ${process.version}): ` +
+      "import.meta.main is unavailable, and every command would silently do nothing.",
+  );
+}
+
 export const REPO_ROOT = resolve(import.meta.dirname, "..", "..");
 
 export const DEFAULT_DB_PATH = "data/sharesies.db";
 
-/** Resolve a DB path relative to the repo root, so scripts work from any cwd. */
+/**
+ * Resolve a DB path relative to the repo root, so scripts work from any cwd.
+ *
+ * A blank value counts as unset. The example `.env` ships `DB_PATH=` with nothing
+ * after it, and `resolve(REPO_ROOT, "")` is the repo root — SQLite would then try
+ * to open a directory as a database file rather than falling back to the default.
+ */
 export function resolveDbPath(path?: string): string {
-  const raw = path ?? process.env["DB_PATH"] ?? DEFAULT_DB_PATH;
+  const raw = path?.trim() || process.env["DB_PATH"]?.trim() || DEFAULT_DB_PATH;
   return isAbsolute(raw) ? raw : resolve(REPO_ROOT, raw);
 }
 

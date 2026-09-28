@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.2.0"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -20,6 +20,7 @@
     "seed:demo:reset": "node --env-file-if-exists=.env scripts/seed-demo.ts --reset",
     "api": "node --env-file-if-exists=.env src/api/server.ts",
     "dev": "node --env-file-if-exists=.env --watch src/api/server.ts",
+    "schedule": "node --env-file-if-exists=.env src/scheduler/run.ts",
     "web:dev": "npm --prefix web run dev",
     "web:build": "npm --prefix web run build"
   },
