@@ -274,8 +274,8 @@ kept so the reasoning stays visible.
    is a per-account flag, so including another account later is a click, and every
    account is snapshotted either way so the history is there to backfill.
 2. **Target:** amount, optional date, and the first milestones.
-   **$18,000, no target date, measured on "Ben's High-growth portfolio"** (the
-   Recommended Investment Portfolio). The other account, "Ben's Investments", is
+   **$XX,XXX, no target date, measured on "High-growth portfolio"** (the
+   Recommended Investment Portfolio). The other account, "Investments", is
    deliberately *not* counted, even though it is the larger balance: the goal is
    about that one portfolio growing. Milestones are the standard 25/50/75/100% of
    the target, i.e. $4,500 / $9,000 / $13,500 / $18,000. No target date was set, so
