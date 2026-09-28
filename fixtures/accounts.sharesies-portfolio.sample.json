@@ -1,0 +1,57 @@
+{
+  "_comment": "Synthetic sample modelled on Akahu's documented /accounts shape (Account Model guide). Replace with a redacted real response during the Phase 0 spike. Numbers are invented.",
+  "success": true,
+  "items": [
+    {
+      "_id": "acc_sharesies_investment_0001",
+      "name": "Sharesies Investment",
+      "status": "ACTIVE",
+      "type": "INVESTMENT",
+      "_authorisation": "authorisation_0001",
+      "connection": {
+        "_id": "conn_sharesies",
+        "name": "Sharesies",
+        "logo": "https://example.invalid/sharesies.png",
+        "connection_type": "classic"
+      },
+      "balance": { "current": 18432.55, "currency": "NZD" },
+      "refreshed": {
+        "balance": "2026-09-28T02:11:04.000Z",
+        "meta": "2026-09-28T02:11:04.000Z",
+        "transactions": "2026-09-28T02:11:04.000Z"
+      },
+      "meta": {
+        "holder": "W WONG",
+        "portfolio": [
+          { "name": "Smartshares US 500 ETF", "symbol": "USF", "units": 120.5, "value": 10250.75 },
+          { "name": "Fisher & Paykel Healthcare", "symbol": "FPH", "units": 30, "value": 4821.8 },
+          { "name": "Air New Zealand", "symbol": "AIR", "units": 500, "value": 3360.0 }
+        ]
+      }
+    },
+    {
+      "_id": "acc_sharesies_wallet_0001",
+      "name": "Sharesies Wallet",
+      "status": "ACTIVE",
+      "type": "WALLET",
+      "connection": {
+        "_id": "conn_sharesies",
+        "name": "Sharesies",
+        "connection_type": "classic"
+      },
+      "balance": { "current": 412.15, "currency": "NZD" },
+      "refreshed": { "balance": "2026-09-28T02:11:04.000Z", "meta": "2026-09-28T02:11:04.000Z" },
+      "meta": { "holder": "W WONG" }
+    },
+    {
+      "_id": "acc_anz_everyday_0001",
+      "name": "Everyday Account",
+      "status": "ACTIVE",
+      "type": "CHECKING",
+      "connection": { "_id": "conn_anz", "name": "ANZ" },
+      "formatted_account": "01-0123-0123456-00",
+      "balance": { "current": 2043.1, "available": 2043.1, "currency": "NZD" },
+      "refreshed": { "balance": "2026-09-27T20:00:00.000Z" }
+    }
+  ]
+}

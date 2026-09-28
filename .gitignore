@@ -1,0 +1,15 @@
+node_modules/
+.env
+.env.local
+
+# SQLite database + WAL sidecars. This is the only copy of the history
+# (Akahu cannot re-serve past values) so it is deliberately NOT tracked,
+# but it must be backed up. See README.
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+
+web/dist/
+dist/
+*.log
