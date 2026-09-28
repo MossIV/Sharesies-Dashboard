@@ -250,6 +250,31 @@ export interface TransferScanResult {
   warnings: string[];
 }
 
+export interface NotificationStatus {
+  channels: string[];
+  enabled: boolean;
+  problems: string[];
+  notifications: {
+    id: number;
+    milestoneId: number | null;
+    channel: string;
+    status: "sent" | "error" | "skipped";
+    error: string | null;
+    detail: string | null;
+    createdAt: string;
+  }[];
+}
+
+export interface DumpCounts {
+  goals: number;
+  milestones: number;
+  accounts: number;
+  snapshots: number;
+  holdings: number;
+  contributions: number;
+  netContributions: number;
+}
+
 export interface Settings {
   assumptions: { annualReturn: number; monthlyContribution: number };
   source: {
@@ -342,6 +367,13 @@ export const api = {
       body: JSON.stringify(input),
     }),
   imports: () => request<{ imports: ImportRecord[] }>("/api/imports"),
+  notificationStatus: () => request<NotificationStatus>("/api/notifications"),
+  exportCounts: () => request<{ counts: DumpCounts }>("/api/export/counts"),
+  testNotifications: () =>
+    request<{ results: { channel: string; ok: boolean; error: string | null }[]; message: { title: string; body: string } }>(
+      "/api/notifications/test",
+      { method: "POST" },
+    ),
   scanTransfers: (window: { from?: string; to?: string }) =>
     request<TransferScanResult>("/api/transfers/scan", {
       method: "POST",

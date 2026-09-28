@@ -1,5 +1,5 @@
 /**
- * The Notifier boundary (plan section 10).
+ * The Notifier boundary (plan section 11, Phase 4: milestone-reached announcements).
  *
  * One method, so a channel is a small module rather than a branch inside the
  * collector. Every channel is optional and every failure is recorded per channel

@@ -35,6 +35,8 @@ export interface ContributionRow {
   amountNzd: number;
   note: string | null;
   source: "manual" | "csv" | "bank";
+  /** The provider's id or a content hash; null for a hand-entered row. */
+  externalRef: string | null;
   createdAt: string;
 }
 
@@ -458,6 +460,7 @@ function toContribution(row: Row): ContributionRow {
     amountNzd: n(row["amount_nzd"]),
     note: sn(row["note"]),
     source: s(row["source"]) as ContributionRow["source"],
+    externalRef: sn(row["external_ref"]),
     createdAt: s(row["created_at"]),
   };
 }

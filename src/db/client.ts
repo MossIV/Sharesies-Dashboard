@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname, isAbsolute, resolve } from "node:path";
 
-const REPO_ROOT = resolve(import.meta.dirname, "..", "..");
+export const REPO_ROOT = resolve(import.meta.dirname, "..", "..");
 
 export const DEFAULT_DB_PATH = "data/sharesies.db";
 

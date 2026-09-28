@@ -192,7 +192,7 @@ export async function collectOnce(
     // 6. Stamp any newly reached milestones.
     const milestonesStamped = stampReachedMilestones(db);
 
-    // 6b. Announce them (plan section 10). A channel that fails is recorded per
+    // 6b. Announce them (plan section 11, Phase 4). A channel that fails is recorded per
     // channel and does not stop the collection: the snapshot is the important
     // part, and the announcement is retried on the next run.
     let notifications: DispatchResult | null = null;

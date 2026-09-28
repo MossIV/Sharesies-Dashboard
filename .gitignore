@@ -13,3 +13,6 @@ data/*.db-shm
 web/dist/
 dist/
 *.log
+
+# Database backups (npm run backup). Local copies of the history, not source.
+backups/

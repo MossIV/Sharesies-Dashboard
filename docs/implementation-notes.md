@@ -33,6 +33,16 @@ document; this file records where the build diverged from it and why.
 * **`raw_fetches` pruning.** The table is capped at the most recent 60 rows per account
   (`pruneRawFetches`) so an insurance policy does not grow into an archive.
 
+## Phase 4 decisions
+
+| Plan said | Built | Why |
+|---|---|---|
+| Notifications by email or push | Four channels behind one `Notifier` interface: `console`, `webhook`, `ntfy`, `email` | The plan lists two channels; the interface costs nothing extra and console is what makes the feature testable without an account anywhere. ntfy is free and needs no signup, so phone push works on day one. |
+| "Nice-to-have" milestones | Dedupe enforced by a `UNIQUE (milestone_id, channel)` constraint, not in memory | A re-sent "you hit $25k" is the failure people actually notice. A restart, a retry, or two collectors running would all duplicate with an in-memory guard. |
+| Bank-transfer auto-detection (verify feasibility first) | Detection proposes, never writes; `--apply` and an explicit button are required | Feasibility check first: Akahu's transactions feed does carry the credits into the Sharesies connection, but matching on a description string will eventually match something wrong. A wrong contribution silently corrupts the contributions-vs-growth chart, so the cost of a confirmation click is worth it. Rejected near-misses are shown too, so a transfer it declined to match is visible rather than silently absent. |
+| Export or backup | Both, and they are different things | Copying the database with `VACUUM INTO` is the backup; the JSON/CSV exports are for using the data elsewhere. Calling a download link a "backup" would imply the history is safe when it is still one disk failure away. |
+| Mobile-friendly layout | Single column below 900px, phone rules below 640px | Checked at 375px and 393px for horizontal overflow. Data tables scroll sideways rather than compressing, because a six-column table squeezed into 340px is not a layout, it is a smear. |
+
 ## Verified against Akahu's docs
 
 Checked rather than assumed, because the plan flagged these as "re-check in Phase 0":
@@ -53,14 +63,15 @@ Checked rather than assumed, because the plan flagged these as "re-check in Phas
 
 ## Known gaps
 
-* **Phase 4 is untouched:** notifications, CSV import, bank-transfer detection, KiwiSaver
-  via Akahu, export/backup tooling.
-* **CSV import** (`CsvSource`) is not written. `contributions.source = 'csv'` exists and
-  the API accepts it, so the import only needs a parser over the Sharesies Transaction
-  Report.
-* **Milestone ETAs use the current goals's assumption set**, not a per-user override per
+* **Phase 0's real Akahu spike is still outstanding.** Everything else runs today against
+  the manual source and the demo data; the spike needs the two tokens, and its gate
+  decides whether the allocation view has data to show. No code waits on it.
+* **Milestone ETAs use the current goal's assumption set**, not a per-user override per
   request beyond the query parameters `GET /api/projection` already accepts.
 * **No auth on the API.** Intentional for a localhost-only personal app; revisit if it is
   ever bound to a non-loopback address.
 * **`web/dist` is not committed**, so `npm run web:build` is required before the API can
   serve the UI (the API says so in plain text at `/` if it is missing).
+* **Nothing schedules the daily job for you.** The plan's Task Scheduler / cron snippet in
+  the README is the whole mechanism, and `npm run backup` needs the same treatment or the
+  backups only exist when you remember.

@@ -419,6 +419,38 @@ button.small {
   font-weight: 700;
 }
 
+/* Download links styled as buttons, so the export card reads like the rest. */
+a.button {
+  display: inline-block;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--card-hover);
+  color: var(--text);
+  text-decoration: none;
+}
+
+a.button:hover {
+  border-color: var(--accent);
+}
+
+/* A hint that sits beside a control on a wide screen and under it on a phone. */
+.field-hint {
+  color: var(--muted);
+  font-size: 12px;
+  margin-left: 10px;
+}
+
+@media (max-width: 640px) {
+  .field-hint {
+    display: block;
+    margin: 8px 0 0;
+  }
+}
+
 input[type="file"] {
   font: inherit;
   font-size: 13px;
@@ -521,4 +553,125 @@ code {
   color: var(--muted);
   padding: 40px 0;
   text-align: center;
+}
+
+/* ----------------------------------------------------------------- mobile */
+
+/**
+ * The dashboard is checked on a phone as often as on a laptop, so the narrow
+ * layout is a first-class case rather than a degradation.
+ *
+ * Three things actually break at 390px and each is handled explicitly: the data
+ * tables (wider than the screen, so they scroll instead of squashing), the card
+ * padding (20px of gutters on a 390px screen wastes a tenth of the width), and
+ * the button rows (side by side is unreadable, so they stack full width).
+ */
+.button-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+
+@media (max-width: 640px) {
+  .shell {
+    padding: 16px 12px 48px;
+  }
+
+  .card {
+    padding: 14px 13px;
+  }
+
+  .masthead {
+    align-items: flex-start;
+    margin-bottom: 14px;
+  }
+
+  .masthead h1 {
+    font-size: 19px;
+  }
+
+  .grid {
+    gap: 12px;
+  }
+
+  /* Data tables are wider than a phone: scroll them rather than compressing
+     every column into illegibility. An anonymous table box keeps the cell
+     layout while the element itself scrolls. */
+  .card > table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  th,
+  td {
+    padding-right: 12px;
+    font-size: 13px;
+  }
+
+  th {
+    font-size: 10px;
+  }
+
+  .metric-row {
+    gap: 14px 20px;
+  }
+
+  .button-row {
+    flex-direction: column;
+  }
+
+  .button-row > *,
+  .button-row a.button {
+    width: 100%;
+    text-align: center;
+    box-sizing: border-box;
+  }
+
+  /* Inputs sit under their labels instead of beside them. */
+  .form-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .form-row > * {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  button {
+    min-height: 40px;
+  }
+
+  input,
+  select,
+  textarea {
+    font-size: 16px; /* stops iOS Safari zooming in on focus */
+  }
+
+  .callout {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .progress-outer {
+    margin: 18px 0 24px;
+  }
+}
+
+@media (max-width: 400px) {
+  .masthead h1 {
+    font-size: 18px;
+  }
+
+  .card {
+    padding: 13px 11px;
+  }
+
+  table {
+    font-size: 13px;
+  }
 }

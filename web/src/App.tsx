@@ -4,8 +4,10 @@ import {
   nzd,
   type AccountList,
   type Contribution,
+  type DumpCounts,
   type Holdings,
   type ImportRecord,
+  type NotificationStatus,
   type Projection,
   type Settings,
   type SnapshotSeries,
@@ -17,6 +19,8 @@ import { SyncHealthStrip } from "./components/SyncHealthStrip.tsx";
 import { AccountsCard } from "./components/AccountsCard.tsx";
 import { CsvImportCard } from "./components/CsvImportCard.tsx";
 import { TransferCandidatesCard } from "./components/TransferCandidatesCard.tsx";
+import { ExportCard } from "./components/ExportCard.tsx";
+import { NotificationsCard } from "./components/NotificationsCard.tsx";
 import { AllocationDonut, ContributionsChart, ProjectionChart, ValueChart } from "./components/Charts.tsx";
 import { ContributionLog } from "./components/ContributionLog.tsx";
 import { SettingsPanel } from "./components/SettingsPanel.tsx";
@@ -27,6 +31,8 @@ interface Data {
   holdings: Holdings;
   accounts: AccountList;
   imports: ImportRecord[];
+  counts: DumpCounts | null;
+  notifications: NotificationStatus | null;
   contributions: { contributions: Contribution[]; total: number; totalAllTime: number };
   projection: Projection;
   settings: Settings;
@@ -40,17 +46,26 @@ export default function App() {
 
   const load = useCallback(async () => {
     try {
-      const [summary, series, holdings, accounts, importLog, contributions, projection, settings] = await Promise.all([
-        api.summary(),
-        api.snapshots(),
-        api.holdings(),
-        api.accounts(),
-        api.imports(),
-        api.contributions(),
-        api.projection({}),
-        api.settings(),
-      ]);
-      setData({ summary, series, holdings, accounts, imports: importLog.imports, contributions, projection, settings });
+      const [summary, series, holdings, accounts, importLog, counts, notifications, contributions, projection, settings] =
+        await Promise.all([
+          api.summary(),
+          api.snapshots(),
+          api.holdings(),
+          api.accounts(),
+          api.imports(),
+          api.exportCounts(),
+          api.notificationStatus(),
+          api.contributions(),
+          api.projection({}),
+          api.settings(),
+        ]);
+      setData({
+        summary, series, holdings, accounts,
+        imports: importLog.imports,
+        counts: counts.counts,
+        notifications,
+        contributions, projection, settings,
+      });
       setError(null);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -114,7 +129,7 @@ export default function App() {
     );
   }
 
-  const { summary, series, holdings, accounts, imports, contributions, projection, settings } = data;
+  const { summary, series, holdings, accounts, imports, counts, notifications, contributions, projection, settings } = data;
   const health = summary.syncHealth;
 
   return (
@@ -190,6 +205,11 @@ export default function App() {
 
       <div style={{ marginBottom: 16 }}>
         <TransferCandidatesCard onImported={load} />
+      </div>
+
+      <div className="grid cols-2" style={{ marginBottom: 16 }}>
+        <ExportCard counts={counts} lastSnapshotDate={summary.syncHealth.lastSnapshotDate} />
+        <NotificationsCard status={notifications} onChanged={load} />
       </div>
 
       <div className="grid cols-2" style={{ marginBottom: 16 }}>

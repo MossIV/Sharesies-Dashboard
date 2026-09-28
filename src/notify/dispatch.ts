@@ -1,5 +1,5 @@
 /**
- * Announcing reached milestones (plan section 10).
+ * Announcing reached milestones (plan section 11, Phase 4).
  *
  * The dedupe rule: a milestone is sent at most once per channel, enforced in the
  * database by `notifications` (unique on milestone_id + channel) and by only
