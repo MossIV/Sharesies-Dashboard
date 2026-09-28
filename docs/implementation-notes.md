@@ -71,11 +71,21 @@ Two further notes from the same session:
 no name, no email. Anything user-facing must come from `/accounts`.
 
 The real `/accounts` payload matched the documented shape closely, which the
-hand-written fixtures had already modelled — but the spike caught two parser
-assumptions worth recording: holding `symbol` values are sometimes six-digit
-Sharesies fund codes rather than tickers (`450002`), and `meta.breakdown.returns`
-sits right next to the value without being it, so treating `returns` as a balance
-would have been a plausible and very wrong guess.
+hand-written fixtures had already modelled — but the spike caught three things
+worth recording:
+
+* Holding `symbol` values are sometimes six-digit Sharesies fund codes rather than
+  tickers (`450002`).
+* `meta.breakdown.returns` sits right next to the value without being it, so
+  treating `returns` as a balance would have been a plausible and very wrong guess.
+* **`meta.portfolio` does not always add up to the balance.** One account's
+  holdings accounted for about five sixths of its `balance.current`, so the rest is
+  an uninvested cash balance sitting inside the investment account. Two
+  consequences: the allocation donut describes the invested portion only, and the
+  account value must always come from `balance.current` rather than from summing
+  holdings, which would under-report. The account the goal tracks happens to be
+  fully invested, so its donut explains it exactly; the test asserts the
+  one-directional rule (holdings never exceed the balance) rather than equality.
 
 ## Verified against Akahu's docs
 
