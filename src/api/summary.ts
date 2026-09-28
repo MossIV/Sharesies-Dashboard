@@ -70,7 +70,7 @@ export interface Summary {
   milestones: EvaluatedMilestone[];
   nextMilestone: EvaluatedMilestone | null;
   syncHealth: SyncHealth;
-  dataMode: "akahu" | "manual" | "unknown";
+  dataMode: "akahu" | "manual" | "demo" | "unknown";
 }
 
 function ageHours(iso: string | null, now: Date): number | null {
@@ -87,7 +87,10 @@ export function trailingChange(series: { date: string; value: number }[], today:
   const cutoff = new Date(Date.parse(`${today}T00:00:00.000Z`) - days * 86_400_000)
     .toISOString()
     .slice(0, 10);
-  const baseline = series.find((point) => point.date <= cutoff);
+  // The *closest* point at or before the cutoff, not the first one: scanning
+  // forwards would always land on the oldest snapshot and report the change
+  // since collection began.
+  const baseline = series.findLast((point) => point.date <= cutoff);
   if (!baseline || baseline.date === latest.date) return null;
   return Math.round((latest.value - baseline.value) * 100) / 100;
 }
@@ -193,8 +196,11 @@ export function buildSummary(
     milestones,
     nextMilestone: nextMilestone(milestones),
     syncHealth,
-    dataMode: snapshots[0]?.source === "akahu" || snapshots[0]?.source === "manual"
-      ? snapshots[0].source
-      : "unknown",
+    // 'demo' is the seeded development dataset, labelled in the UI so it can
+    // never be read as real portfolio data.
+    dataMode: (() => {
+      const source = snapshots[0]?.source;
+      return source === "akahu" || source === "manual" || source === "demo" ? source : "unknown";
+    })(),
   };
 }

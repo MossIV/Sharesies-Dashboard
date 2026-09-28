@@ -12,6 +12,8 @@
     "test:watch": "node --test --watch \"tests/**/*.test.ts\"",
     "migrate": "node src/db/migrate.ts",
     "collect": "node src/collector/run.ts",
+    "seed:demo": "node scripts/seed-demo.ts",
+    "seed:demo:reset": "node scripts/seed-demo.ts --reset",
     "api": "node src/api/server.ts",
     "dev": "node --watch src/api/server.ts",
     "web:dev": "npm --prefix web run dev",

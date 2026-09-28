@@ -1,0 +1,483 @@
+/* Standalone page: this is its own app, not an embedded widget, so it defines
+   its own palette and background. */
+:root {
+  --bg: #0b1020;
+  --bg-soft: #121a2e;
+  --card: #151d33;
+  --card-hover: #1a2440;
+  --border: #24304e;
+  --text: #e8ecf6;
+  --muted: #93a0bd;
+  --accent: #5b8cff;
+  --accent-soft: #23335c;
+  --good: #35c48f;
+  --warn: #f0b429;
+  --bad: #f2686b;
+  --radius: 14px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(1200px 600px at 15% -10%, #172242 0%, var(--bg) 55%) no-repeat fixed, var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+.shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 28px 20px 64px;
+}
+
+/* ------------------------------------------------------------------ header */
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.masthead h1 {
+  font-size: 22px;
+  margin: 0 0 2px;
+  letter-spacing: -0.01em;
+}
+
+.masthead .sub {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.badges {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.badge {
+  border: 1px solid var(--border);
+  background: var(--bg-soft);
+  color: var(--muted);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.badge.good {
+  color: var(--good);
+  border-color: #1f6b52;
+}
+
+.badge.warn {
+  color: var(--warn);
+  border-color: #7a5a12;
+}
+
+.badge.bad {
+  color: var(--bad);
+  border-color: #7a2a2c;
+}
+
+/* ------------------------------------------------------------------- cards */
+
+.grid {
+  display: grid;
+  gap: 16px;
+}
+
+.grid.cols-2 {
+  grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+}
+
+.grid.cols-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  .grid.cols-2,
+  .grid.cols-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+}
+
+.card h2 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 0 0 14px;
+  font-weight: 700;
+}
+
+.card h2 .hint {
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  margin-left: 6px;
+}
+
+.metric {
+  font-size: 30px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.metric.small {
+  font-size: 20px;
+}
+
+.metric-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 26px;
+  margin-bottom: 6px;
+}
+
+.metric-label {
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 2px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.tiny {
+  font-size: 12px;
+}
+
+.mono {
+  font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------- progress */
+
+.progress-outer {
+  position: relative;
+  margin: 26px 0 34px;
+}
+
+.progress-bar {
+  height: 14px;
+  background: #0d1526;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3f6bd8, #63b3ff);
+  border-radius: 999px;
+  transition: width 400ms ease;
+}
+
+.progress-marker {
+  position: absolute;
+  top: -6px;
+  width: 2px;
+  height: 26px;
+  background: var(--border);
+  border-radius: 2px;
+}
+
+.progress-marker.reached {
+  background: var(--good);
+}
+
+.progress-marker.next {
+  background: var(--warn);
+}
+
+.progress-marker span {
+  position: absolute;
+  top: 26px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.pace {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.pace.ahead {
+  color: var(--good);
+}
+
+.pace.on_track {
+  color: var(--accent);
+}
+
+.pace.behind {
+  color: var(--bad);
+}
+
+.pace.unknown {
+  color: var(--muted);
+}
+
+/* ---------------------------------------------------------------- banners */
+
+.banner {
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  border: 1px solid;
+  font-size: 14px;
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.banner.warn {
+  background: #2a2313;
+  border-color: #6d5314;
+  color: #ffd979;
+}
+
+.banner.bad {
+  background: #2c1517;
+  border-color: #7a2a2c;
+  color: #ffb3b4;
+}
+
+.banner.info {
+  background: var(--bg-soft);
+  border-color: var(--border);
+  color: var(--muted);
+}
+
+/* ----------------------------------------------------------------- tables */
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+th {
+  text-align: left;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 700;
+  padding: 0 10px 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+td {
+  padding: 9px 10px 9px 0;
+  border-bottom: 1px solid #1c2540;
+  vertical-align: middle;
+}
+
+tr:last-child td {
+  border-bottom: none;
+}
+
+.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 7px;
+  vertical-align: 1px;
+}
+
+.dot.reached {
+  background: var(--good);
+}
+
+.dot.next {
+  background: var(--warn);
+}
+
+.dot.future {
+  background: #3a4568;
+}
+
+/* ------------------------------------------------------------------ forms */
+
+.form-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+
+label {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+input,
+select,
+textarea {
+  background: #0d1526;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  min-width: 0;
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid var(--accent-soft);
+  border-color: var(--accent);
+}
+
+button {
+  background: var(--accent);
+  border: 1px solid transparent;
+  color: #08122b;
+  font-weight: 700;
+  border-radius: 9px;
+  padding: 9px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text);
+  font-weight: 600;
+}
+
+button.danger {
+  background: transparent;
+  border-color: #5c2a2d;
+  color: var(--bad);
+  font-weight: 600;
+  padding: 5px 10px;
+}
+
+button.small {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.stack {
+  display: grid;
+  gap: 10px;
+}
+
+.callout {
+  background: var(--bg-soft);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 14px;
+}
+
+.disclaimer {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 12px;
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+}
+
+.error {
+  color: var(--bad);
+  font-size: 13px;
+  margin-top: 6px;
+}
+
+.legend {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.legend .swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  margin-right: 6px;
+  vertical-align: -1px;
+}
+
+.tooltip {
+  background: #0d1526;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 8px 10px;
+  font-size: 12px;
+  color: var(--text);
+}
+
+.tooltip strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.empty {
+  color: var(--muted);
+  font-size: 14px;
+  padding: 14px 0;
+}
+
+.spinner {
+  color: var(--muted);
+  padding: 40px 0;
+  text-align: center;
+}
