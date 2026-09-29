@@ -14,12 +14,17 @@
 set -eu
 
 echo "Sharesies dashboard"
-# Resolve the database path the same way the app does, so the banner cannot say
-# one thing while the server uses another. (It said "data/sharesies.db" while the
-# server opened /app/data/sharesies.db, which hid a database outside the volume.)
-resolved_db=$(node --input-type=module -e "import { resolveDbPath } from './src/db/client.ts'; console.log(resolveDbPath());" 2>/dev/null || echo "${DB_PATH:-unresolved}")
-echo "  database: ${resolved_db}"
-echo "  backups:  ${BACKUP_DIR:-/backups}"
+# Ask the app where it will actually read and write, rather than repeating the
+# environment variables. Echoing them is how the banner came to report
+# "backups: /backups" while the app wrote to /app/backups, inside the container and
+# outside the volume; the same mistake had already been fixed for the database, and
+# the backups line was left behind. The app also warns here when a resolved path is
+# not on a mounted filesystem, which is the failure that check exists to catch.
+if ! node --input-type=module -e "import { describeStorage } from './src/db/paths.ts'; for (const line of describeStorage()) console.log(line);" 2>/dev/null; then
+  echo "  database: ${DB_PATH:-unresolved}"
+  echo "  backups:  ${BACKUP_DIR:-unresolved}"
+  echo "  WARNING: could not resolve the storage paths; the values above are the environment as-is."
+fi
 echo "  schedule: ${SCHEDULE_HOUR_NZ:-7}:$(printf '%02d' "${SCHEDULE_MINUTE_NZ:-0}") ${SCHEDULE_TIME_ZONE:-Pacific/Auckland}"
 
 # Only pass --env-file when there is one to read. In a container there usually is

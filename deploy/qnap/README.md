@@ -285,8 +285,48 @@ Sharesies dashboard
 Next run: 07:00 on ... (Pacific/Auckland)
 ```
 
-If that first line does not name a path under `/data`, stop — the database is inside the
-container and a rebuild will lose it.
+**Check both of the first two lines, not just the database one.** Each names a path that
+must be under a mounted volume:
+
+* A `database:` path that is not under `/data` means the history is inside the container,
+  one rebuild away from starting empty.
+* A `backups:` path that is not `/backups` means the copies are inside the container too —
+  they exist, they are invisible from the share, and recreating the container deletes them.
+  This is the failure mode that is easiest to miss, because a backup that reports success
+  has done everything it promised; it just went somewhere doomed.
+
+An image built after this check warns when it can tell a path is not on a mounted
+filesystem, which is the fastest way to spot either case:
+
+```
+  WARNING: the backups path is on the container's own filesystem, not a mounted volume:
+           /app/backups
+```
+
+**On an older image, give a hand-run backup its directory.** `node scripts/backup.ts`
+used to ignore `BACKUP_DIR` and fall back to the repository's own `backups/` directory,
+which inside the container is `/app/backups` — so a `docker exec … node scripts/backup.ts`
+reported success and left the copy somewhere a rebuild discards, while the scheduled job
+(the one at 07:00) wrote to the right place. Fix the compose file, then either recreate
+from a newer image or pass the directory explicitly:
+
+```bash
+docker exec sharesies-dashboard node scripts/backup.ts --dir /backups
+```
+
+Three commands answer what is really going on:
+
+```bash
+docker exec sharesies-dashboard printenv | grep -E "DB_PATH|BACKUP_DIR"   # what it was given
+docker inspect sharesies-dashboard --format '{{json .Mounts}}'            # what is mounted
+docker exec sharesies-dashboard node scripts/backup.ts --list --dir /backups   # what is on the share
+```
+
+To rescue copies out of a container before recreating it:
+
+```bash
+docker cp sharesies-dashboard:/app/backups /share/<SHARE>/sharesies/rescued-backups
+```
 
 `settings: from the environment` is the expected line: the tokens reach the container as
 environment variables from compose's `env_file`, so there is no `.env` file inside it. An

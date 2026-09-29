@@ -16,12 +16,21 @@ export const DEFAULT_BACKUP_DIR = join(REPO_ROOT, "backups");
 export const DEFAULT_KEEP = 14;
 
 /**
- * Where backups go. A blank value means "not set" — resolving it would put the
- * copies in the current working directory, which in a container is the app
- * directory itself, and in a CLI run is wherever you happened to be.
+ * Where backups go.
+ *
+ * The rule is the same one `resolveDbPath` uses, and it has to be, because there are
+ * two callers: the scheduled job reads `BACKUP_DIR`, and the command you run by hand
+ * went through the default below. Two rules for one setting meant the daily copy
+ * landed on the mounted volume while `docker exec … node scripts/backup.ts` wrote to
+ * `/app/backups` inside the container — a backup that reported success, was invisible
+ * from the share, and died with the container it was taken in.
+ *
+ * A blank value means "not set": resolving it would put the copies in the current
+ * working directory, which in a container is the app directory itself, and in a CLI
+ * run is wherever you happened to be.
  */
 export function resolveBackupDir(dir?: string): string {
-  return resolve(dir?.trim() || DEFAULT_BACKUP_DIR);
+  return resolve(dir?.trim() || process.env["BACKUP_DIR"]?.trim() || DEFAULT_BACKUP_DIR);
 }
 
 export interface BackupResult {
