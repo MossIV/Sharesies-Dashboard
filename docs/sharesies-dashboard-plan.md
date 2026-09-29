@@ -274,13 +274,13 @@ kept so the reasoning stays visible.
    is a per-account flag, so including another account later is a click, and every
    account is snapshotted either way so the history is there to backfill.
 2. **Target:** amount, optional date, and the first milestones.
-   **$XX,XXX, no target date, measured on "High-growth portfolio"** (the
-   Recommended Investment Portfolio). The other account, "Investments", is
-   deliberately *not* counted, even though it is the larger balance: the goal is
-   about that one portfolio growing. Milestones are the standard 25/50/75/100% of
-   the target, i.e. $4,500 / $9,000 / $13,500 / $18,000. No target date was set, so
-   the pace line and the "needed monthly" figure stay out of the way; the projection
-   chart still gives dates under each assumption.
+   **A set amount, no target date, measured on one Sharesies portfolio** (the
+   Recommended Investment Portfolio). The other account is deliberately *not*
+   counted, even though it is much the larger balance: the goal is about that one
+   portfolio growing. The milestones are the standard 25/50/75/100% of the target,
+   which puts the first one well above the tracked portfolio's current value. No
+   target date was set, so the pace line and the "needed monthly" figure stay out
+   of the way; the projection chart still gives dates under each assumption.
 3. **Progress basis:** **value** (the default). Net contributions would need a
    deposit log, and Akahu cannot see Sharesies trades, so the contribution log
    starts empty and fills from the transaction report or bank-transfer detection.

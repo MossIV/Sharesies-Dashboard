@@ -50,7 +50,7 @@ real connection showed up in four places. Each is fixed and pinned by a test.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| The dashboard measured a $100k demo goal instead of the real $18,000 one | `seed:demo:reset` deleted snapshots, contributions and its account, but not the goal it created. The leftover goal stayed active, and `getActiveGoal` ordered by `id ASC`, so the older row won | `goals.source` (migration 003), the reset deletes `source = 'demo'`, and `getActiveGoal` orders newest-first |
+| The dashboard measured a demo goal instead of the real one | `seed:demo:reset` deleted snapshots, contributions and its account, but not the goal it created. The leftover goal stayed active, and `getActiveGoal` ordered by `id ASC`, so the older row won | `goals.source` (migration 003), the reset deletes `source = 'demo'`, and `getActiveGoal` orders newest-first |
 | A second active goal was silently ignored | The schema allowed many rows with `is_active = 1` and nothing enforced one; "active" reads as single-valued because the UI has one progress bar and no goal switcher | `createGoal` and `updateGoal` deactivate the others |
 | The header said "across 2 accounts" while only one was in the goal | It counted every registered account, not the in-scope ones, next to an in-scope total | Counts the in-scope accounts and names the excluded ones |
 | The test alert said "$0.00" and today's date was a day off | `buildMessage` was called with `new Date().toISOString()`, which is UTC, while every other date in the app is Pacific/Auckland | Uses `todayNz()` |

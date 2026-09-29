@@ -2,7 +2,7 @@
  * The goal scope has to hold everywhere, not just on the headline number.
  *
  * Both bugs here were found on real data: the dashboard showed 1.2% progress and
- * a $214.33 current value, while the milestone timeline showed "50% of goal
+ * a $250 current value, while the milestone timeline showed "50% of goal
  * reached" and two milestone alerts had already gone to a phone. The cause was
  * the same in both cases — a query that looked at every snapshot row on disk
  * instead of the accounts inside the goal — and both are the kind that look
@@ -33,8 +33,8 @@ const EXCLUDED = "acc:excluded";
 function dbWithTwoAccounts() {
   const db = testDb();
   for (const [accountId, accountName, inScope] of [
-    [IN_GOAL, "High-growth portfolio", true],
-    [EXCLUDED, "Ben's Investments", false],
+    [IN_GOAL, "Tracked portfolio", true],
+    [EXCLUDED, "Larger portfolio", false],
   ] as const) {
     upsertAccount(db, {
       accountId,
@@ -69,14 +69,14 @@ function snapshot(db: ReturnType<typeof testDb>, accountId: string, date: string
 describe("milestones are measured on the goal's own series", () => {
   test("an account outside the goal cannot reach a milestone", () => {
     const db = dbWithTwoAccounts();
-    const goal = createGoal(db, { name: "High-growth portfolio", targetAmountNzd: 18_000 });
-    createMilestone(db, { goalId: goal.id, label: "25% of goal", amountNzd: 4_500 });
+    const goal = createGoal(db, { name: "Tracked portfolio", targetAmountNzd: 20_000 });
+    createMilestone(db, { goalId: goal.id, label: "25% of goal", amountNzd: 5_000 });
 
     // The small account is inside the goal; the large one is not.
-    snapshot(db, IN_GOAL, "2026-09-29", 214.33);
-    snapshot(db, EXCLUDED, "2026-09-29", 13_400.5);
+    snapshot(db, IN_GOAL, "2026-09-29", 250);
+    snapshot(db, EXCLUDED, "2026-09-29", 9_500);
 
-    assert.equal(stampReachedMilestones(db), 0, "4,500 is not reached by 214.33");
+    assert.equal(stampReachedMilestones(db), 0, "5,000 is not reached by 250");
     assert.equal(listMilestones(db, goal.id)[0]?.firstReachedOn, null);
 
     db.close();
@@ -84,12 +84,12 @@ describe("milestones are measured on the goal's own series", () => {
 
   test("a milestone is stamped on the day the in-scope total crosses it", () => {
     const db = dbWithTwoAccounts();
-    const goal = createGoal(db, { name: "High-growth portfolio", targetAmountNzd: 18_000 });
-    createMilestone(db, { goalId: goal.id, label: "25% of goal", amountNzd: 4_500 });
+    const goal = createGoal(db, { name: "Tracked portfolio", targetAmountNzd: 20_000 });
+    createMilestone(db, { goalId: goal.id, label: "25% of goal", amountNzd: 5_000 });
 
     snapshot(db, IN_GOAL, "2026-09-01", 4_000);
     snapshot(db, IN_GOAL, "2026-09-02", 4_499.99);
-    snapshot(db, IN_GOAL, "2026-09-03", 4_500);
+    snapshot(db, IN_GOAL, "2026-09-03", 5_000);
     snapshot(db, IN_GOAL, "2026-09-04", 4_900);
     snapshot(db, EXCLUDED, "2026-09-01", 500_000);
 
@@ -128,10 +128,10 @@ describe("milestones are measured on the goal's own series", () => {
 
   test("a stamped milestone survives a later dip", () => {
     const db = dbWithTwoAccounts();
-    const goal = createGoal(db, { name: "High-growth portfolio", targetAmountNzd: 18_000 });
-    createMilestone(db, { goalId: goal.id, label: "25% of goal", amountNzd: 4_500 });
+    const goal = createGoal(db, { name: "Tracked portfolio", targetAmountNzd: 20_000 });
+    createMilestone(db, { goalId: goal.id, label: "25% of goal", amountNzd: 5_000 });
 
-    snapshot(db, IN_GOAL, "2026-09-01", 4_600);
+    snapshot(db, IN_GOAL, "2026-09-01", 5_100);
     assert.equal(stampReachedMilestones(db), 1);
     assert.equal(listMilestones(db, goal.id)[0]?.firstReachedOn, "2026-09-01");
 
@@ -145,11 +145,11 @@ describe("milestones are measured on the goal's own series", () => {
 
   test("no in-scope snapshots means nothing is stamped", () => {
     const db = dbWithTwoAccounts();
-    const goal = createGoal(db, { name: "High-growth portfolio", targetAmountNzd: 18_000 });
-    createMilestone(db, { goalId: goal.id, label: "25% of goal", amountNzd: 4_500 });
+    const goal = createGoal(db, { name: "Tracked portfolio", targetAmountNzd: 20_000 });
+    createMilestone(db, { goalId: goal.id, label: "25% of goal", amountNzd: 5_000 });
 
     // Only the excluded account has been collected.
-    snapshot(db, EXCLUDED, "2026-09-29", 13_400.5);
+    snapshot(db, EXCLUDED, "2026-09-29", 9_500);
 
     assert.equal(stampReachedMilestones(db), 0);
     assert.equal(listMilestones(db, goal.id)[0]?.firstReachedOn, null);
@@ -162,26 +162,26 @@ describe("the latest value comes from the goal's accounts", () => {
   test("an excluded account collected more recently cannot blank the goal value", () => {
     const db = dbWithTwoAccounts();
 
-    snapshot(db, IN_GOAL, "2026-09-28", 214.33);
+    snapshot(db, IN_GOAL, "2026-09-28", 250);
     // The excluded account was collected a day later — a Sharesies fetch that
     // failed, say. Taking the global maximum date would look for in-scope rows on
     // the 29th, find none, and report a goal value of zero.
-    snapshot(db, EXCLUDED, "2026-09-29", 13_400.5);
+    snapshot(db, EXCLUDED, "2026-09-29", 9_500);
 
     assert.equal(latestSnapshotDate(db, { scope: "all" }), "2026-09-29", "sync health wants the newest overall");
     assert.equal(latestSnapshotDate(db, { scope: "in" }), "2026-09-28");
 
     const scoped = latestSnapshots(db, { scope: "in" });
     assert.equal(scoped.length, 1);
-    assert.equal(scoped[0]?.valueNzd, 214.33);
+    assert.equal(scoped[0]?.valueNzd, 250);
 
     db.close();
   });
 
   test("the strip that lists every account is per account, not per date", () => {
     const db = dbWithTwoAccounts();
-    snapshot(db, IN_GOAL, "2026-09-28", 214.33);
-    snapshot(db, EXCLUDED, "2026-09-29", 13_400.5);
+    snapshot(db, IN_GOAL, "2026-09-28", 250);
+    snapshot(db, EXCLUDED, "2026-09-29", 9_500);
 
     // `latestSnapshots` means "the newest date, in scope", so even with scope
     // "all" it returns only the account collected on the 29th — the other one

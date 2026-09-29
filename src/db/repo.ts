@@ -481,10 +481,11 @@ export function deleteMilestone(db: DatabaseSync, id: number): boolean {
  *
  * "The series" is the same one the dashboard draws: the in-scope accounts summed
  * per day. Comparing each snapshot row on its own — which is what this did — let
- * an account *outside* the goal scope reach a milestone, so a $4,500 milestone
- * was stamped the day a $13,400 excluded account was collected while the goal
- * itself read 1.2%. It also fired the notification, which then consumed the
- * once-per-channel send for a milestone that had not actually been reached.
+ * an account *outside* the goal scope reach a milestone, so a lower milestone was
+ * stamped the day an excluded account many times its size was collected while the
+ * goal itself read a low single-digit percentage. It also fired the notification,
+ * which then consumed the once-per-channel send for a milestone that had not
+ * actually been reached.
  */
 export function stampReachedMilestones(db: DatabaseSync): number {
   const rows = db.prepare(
