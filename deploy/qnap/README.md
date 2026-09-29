@@ -149,21 +149,59 @@ docker build -t sharesies-dashboard:latest .
 
 ### Option C — publish to a registry and pull (the lighter update path)
 
-Updating becomes "push, then recreate the application" instead of copying a 64–200 MB file
+Updating becomes "push, then recreate the application" instead of copying a 60–200 MB file
 by hand, and a rollback becomes an edit to one line of the compose file rather than a
 re-import. It was not used for the first deployment because it adds a registry account and
 stored credentials for no gain on a personal app that changes occasionally — but if the
 app changes more than a couple of times, it is less work per update, not more.
 
-```bash
-npm run image:push -- --registry ghcr.io/<user>/sharesies-dashboard
-```
+**Docker Hub is the simplest of the registries here**, because Container Station treats it
+as the default. On the free Personal plan (as read on Docker's usage page, September 2026):
+unlimited public repositories, **one** private repository, and pulls limited to 200 per six
+hours when authenticated. One image, pulled once per update, is nowhere near that.
 
-That builds, tags the image with the git short sha and `latest`, pushes both, and prints the
-`image:` line to paste into the compose file. It needs `docker login` first, which is yours
-to do: tokens are not shared with the script or the agent.
+1. Create the repository at <https://hub.docker.com/repository/create> — public or private.
+   Creating it first works for both; a private repository cannot be created by a push.
+   Docker Hub repository names are lowercase, so `mossiv/sharesies-dashboard`.
 
-By hand, it is the same three commands:
+2. Log in on this machine. This is yours to do: the script never sees the password.
+
+   ```bash
+   docker login
+   ```
+
+3. Build, tag and push:
+
+   ```bash
+   npm run image:push -- docker.io/<user>/sharesies-dashboard
+   ```
+
+   It builds the image, tags it with the git short sha **and** `latest`, pushes both, and
+   prints the `image:` line to paste into the compose file.
+
+4. Point the compose file at the registry. A bare `sharesies-dashboard:latest` is satisfied
+   by an imported tar, never by a pull:
+
+   ```yaml
+   image: docker.io/<user>/sharesies-dashboard:<sha>
+   ```
+
+   **Pin the sha tag, not `latest`.** Container Station decides what to pull when the
+   application is created, and a tag that already exists locally is not re-fetched — so
+   `latest` tends to keep running the old image unless you also prune it. Pinning the sha
+   makes each update explicit, and a rollback is editing this one line back.
+
+5. Private repository only: add the Docker Hub credentials in Container Station →
+   **Preferences → Registry**. A public repository needs no credentials on the NAS at all,
+   and nothing secret is published either way — the image carries no `.env`, no database
+   and no tokens, which arrive at run time from the compose file.
+
+**If you would rather not have a registry account**, GHCR is the alternative: private
+packages are free and unlimited there (Docker Hub's free plan allows one private repo), and
+the credentials are a GitHub token with `read:packages`. Otherwise it is the same three
+commands with `ghcr.io/<user>/sharesies-dashboard`.
+
+By hand, the registry route is the same four commands:
 
 ```bash
 # on the Windows machine, in the repo
@@ -174,14 +212,8 @@ docker push <user>/sharesies-dashboard:0.1.0
 docker push <user>/sharesies-dashboard:latest
 ```
 
-Then the `image:` line in the compose file has to name the registry — a bare
-`sharesies-dashboard:latest` is satisfied by an imported tar, not by a pull:
-
-```yaml
-image: docker.io/<user>/sharesies-dashboard:latest
-```
-
-Container Station pulls on start. Two things to decide:
+Container Station pulls on start, when the application is created or recreated. One more
+thing to decide:
 
 * **Private or public.** The image holds no secrets — no `.env`, no database, no raw
   captures, and the tokens are passed in at run time — so a public repository does not

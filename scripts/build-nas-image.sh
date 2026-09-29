@@ -5,7 +5,7 @@
 #   npm run image:nas                                build + export a tar for Container Station
 #   npm run image:nas -- --out E:/                   put the tar somewhere else
 #   npm run image:nas -- --platform linux/arm64      for an ARM NAS
-#   npm run image:push -- --registry ghcr.io/<you>/sharesies-dashboard
+#   npm run image:push -- docker.io/<you>/sharesies-dashboard
 #                                                    build, tag and push instead of exporting
 #
 # Why a script and not the four commands in deploy/qnap/README.md: two of those
@@ -58,13 +58,16 @@ Build the dashboard image into something the NAS can take.
   npm run image:nas                                 build + export a tar for Container Station
   npm run image:nas -- --out E:/                    put the tar somewhere else
   npm run image:nas -- --platform linux/arm64       for an ARM NAS
-  npm run image:push -- --registry ghcr.io/<you>/sharesies-dashboard
+  npm run image:push -- docker.io/<you>/sharesies-dashboard
                                                     build, tag and push instead of exporting
+  IMAGE_REGISTRY=docker.io/<you>/sharesies-dashboard npm run image:push
+                                                    the same, without repeating the repository
 
 Options
   --out DIR            where the tar and its checksum go (default: dist/nas)
   --tag TAG            image tag (default: the git short sha, plus :latest)
   --registry IMAGE     push instead of exporting: tags IMAGE:<sha> and IMAGE:latest
+                       (also taken from IMAGE_REGISTRY, or as a bare argument)
   --platform PLATFORM  build for another architecture (e.g. linux/arm64)
   --force-convert      always route the export through the classic-store daemon
   --no-convert         never convert: export with docker save directly
@@ -78,18 +81,46 @@ need_value() {
   [[ -n "${2:-}" ]] || die "$1 needs a value (try --help)"
 }
 
+# The npm alias `image:push` already passes --registry, so a caller adding their own
+# gives it twice: `--registry --registry docker.io/you/name`, and the first flag would
+# take the second as its value. A value is therefore only read when the next token is
+# not another option, and the repository can be given as a bare argument instead.
+value_after() {
+  if [[ -n "${2:-}" && "${2:0:2}" != "--" ]]; then printf '%s' "$2"; fi
+}
+
+PUSH_REQUESTED="no"
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --out)           need_value --out "${2:-}";          OUT_DIR="$2"; shift 2 ;;
     --tag)           need_value --tag "${2:-}";          TAG="$2"; shift 2 ;;
-    --registry)      need_value --registry "${2:-}";     REGISTRY="$2"; shift 2 ;;
     --platform)      need_value --platform "${2:-}";     PLATFORM="$2"; shift 2 ;;
+    --registry)
+      PUSH_REQUESTED="yes"
+      value="$(value_after "$1" "${2:-}")"
+      if [[ -n "$value" ]]; then REGISTRY="$value"; shift; fi
+      shift ;;
     --force-convert) CONVERT="always"; shift ;;
     --no-convert)    CONVERT="never"; shift ;;
     -h|--help)       usage; exit 0 ;;
-    *)               die "unknown argument: $1 (try --help)" ;;
+    -*)
+      die "unknown argument: $1 (try --help)" ;;
+    *)
+      # A bare argument is the registry: `npm run image:push -- docker.io/you/name`.
+      [[ -z "$REGISTRY" ]] || die "two registries given: ${REGISTRY} and $1"
+      REGISTRY="$1"; PUSH_REQUESTED="yes"; shift ;;
   esac
 done
+
+if [[ "$PUSH_REQUESTED" == "yes" && -z "$REGISTRY" ]]; then
+  REGISTRY="${IMAGE_REGISTRY:-}"
+fi
+if [[ "$PUSH_REQUESTED" == "yes" && -z "$REGISTRY" ]]; then
+  die "--registry was given without a repository.
+       Pass one:  npm run image:push -- docker.io/<user>/sharesies-dashboard
+       or set:    IMAGE_REGISTRY=docker.io/<user>/sharesies-dashboard"
+fi
 
 # ---------------------------------------------------------------- preconditions
 
@@ -98,7 +129,7 @@ docker info --format '{{.ServerVersion}}' >/dev/null 2>&1 \
   || die "the docker daemon is not reachable. Start Docker Desktop and try again."
 [[ -f Dockerfile && -f .dockerignore ]] || die "run this from the repository (no Dockerfile here)."
 if [[ -n "$REGISTRY" && ! "$REGISTRY" =~ ^[^/]+(:[0-9]+)?(/[^:]+)+$ ]]; then
-  die "--registry wants a repository, not a tag: --registry ghcr.io/<user>/<name>"
+  die "--registry wants a repository, not a tag: docker.io/<user>/<name>"
 fi
 
 # ------------------------------------------------------------------------- identity
@@ -280,5 +311,6 @@ log "Copy the tar and its .sha256 to the NAS, verify the checksum there, load it
 log "recreate the application. deploy/qnap/README.md has the NAS side in full."
 log ""
 log "Updating more than a couple of times? The registry route is less work per update:"
-log "  npm run image:push -- --registry ghcr.io/<you>/${IMAGE_NAME}"
+log "  npm run image:push -- docker.io/<you>/${IMAGE_NAME}"
 log "which swaps a 60-200 MB file copy for a pull, and makes rollback a one-line edit."
+log "deploy/qnap/README.md, option C, has the Docker Hub walkthrough."

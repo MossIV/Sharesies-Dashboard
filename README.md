@@ -60,7 +60,7 @@ real portfolio figures.
 | `npm run detect-transfers` | Scan the bank feed for transfers into Sharesies, without logging them |
 | `npm run web:build` | Build the dashboard into `web/dist` for the API to serve |
 | `npm run image:nas` | Build the container image and export a tar Container Station can import |
-| `npm run image:push -- --registry <image>` | Build and push to a registry instead, which is the lighter update path |
+| `npm run image:push -- <registry>/<image>` | Build, tag and push to a registry instead, which is the lighter update path |
 
 ---
 
