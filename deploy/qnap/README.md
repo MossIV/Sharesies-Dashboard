@@ -62,19 +62,45 @@ Copy `.env` across as well — it is git-ignored, so it will not arrive with the
 
 ### Option A — build locally, then load the tar (x86 NAS)
 
+The archive format matters more than the extension, and this is the step that failed
+first. Container Station's importer accepts `*.tar, *.tar.gz, *.tgz` but only understands
+the **legacy `docker save` layout**: `manifest.json`, a `repositories` file, and one
+`<id>/layer.tar` (plus `json` and `VERSION`) per layer.
+
+Docker Desktop with the containerd image store — its default since 2023 — does not write
+that. `docker save` writes an OCI archive (`oci-layout`, `index.json`,
+`blobs/sha256/…`), and even `docker buildx build --output type=docker` writes
+`manifest.json` with `blobs/` paths. Container Station rejects both with
+**"Invalid File Format"**, which is a misleading message: the file is a perfectly valid
+archive, just not the shape it wants.
+
+Convert it with a throwaway daemon that uses the classic store:
+
 ```bash
 # on the Windows machine, in the repo
 docker build -t sharesies-dashboard:latest .
-# --output type=docker writes the format older Docker builds expect. Plain
-# `docker save` on a containerd-backed Docker Desktop emits an OCI layout
-# (blobs/sha256/...) which some Container Station versions cannot import.
-docker buildx build --platform linux/amd64 \
-  --output type=docker,dest=sharesies-dashboard.tar \
-  -t sharesies-dashboard:latest .
+
+S="$PWD"   # or any folder; it is shared with the container below
+docker run -d --privileged --name dind-convert -v "$S:/work" docker:24-dind
+# its entrypoint starts dockerd itself -- do not run dockerd by hand, the readiness
+# loop hangs and the whole thing sits there looking busy
+
+docker exec dind-convert docker info --format '{{.Driver}}'      # want: overlay2
+docker exec dind-convert docker load -i /work/sharesies-dashboard.tar
+docker exec dind-convert docker save sharesies-dashboard:latest \
+  -o /work/sharesies-dashboard-legacy.tar
+docker rm -f dind-convert
+
+# check it is the legacy shape before copying it anywhere
+tar -tf sharesies-dashboard-legacy.tar | grep -x repositories
+tar -tf sharesies-dashboard-legacy.tar | grep -c 'layer.tar$'    # one per layer
 ```
 
-Copy `sharesies-dashboard.tar` to the NAS, then either import it in Container Station
-(**Images → Add → Import image**, called *Load image* in some builds) or over SSH:
+The legacy archive is much larger — layers are stored uncompressed, so roughly 185 MB
+against 64 MB for the OCI one. That is expected, not a fault.
+
+Copy it to the NAS, then import it in Container Station (**Images → Add → Import image**,
+called *Load image* in some builds) or over SSH:
 
 ```bash
 docker load -i /share/<SHARE>/Ben/sharesies/sharesies-dashboard.tar
@@ -88,6 +114,11 @@ confusing way:
 ```bash
 sha256sum /share/<SHARE>/Ben/sharesies/sharesies-dashboard.tar
 ```
+
+The alternative to all of this, if the conversion is tedious: turn off **Settings →
+General → Use containerd for pulling and storing images** in Docker Desktop, restart it,
+rebuild, and `docker save` writes the legacy format directly. It is a global setting for
+every project on the machine, which is why the throwaway daemon is documented first.
 
 ### Option B — build on the NAS
 
@@ -139,8 +170,15 @@ Container Station pulls on start. Two things to decide:
 ## 3. Start it
 
 Container Station → **Applications → Create**, paste `docker-compose.yml` from this
-folder, and set the three paths marked `ADJUST`. Container Station's folder picker shows
-the real `/share/...` path for any folder, which is the quickest way to get them right.
+folder, and set the three paths marked `ADJUST`.
+
+**On those paths.** They are the *host* paths the Docker daemon resolves, which on QNAP
+are `/share/<share>/…`. Container Station's own file browser may show the same folder
+differently — its image importer, for instance, presented a folder as
+`/WongFiles/Ben/sharesies/…` with no `/share` prefix. If the application fails to start
+with a mount error, or starts but cannot find the database, that prefix is the first thing
+to swap. The reliable way to avoid guessing is to add the two volumes through Container
+Station's own volume picker rather than typing the paths, then compare what it writes.
 
 The two that matter most:
 
