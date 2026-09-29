@@ -1,17 +1,21 @@
 # Build the dashboard image and push it to Docker Hub, so updating the NAS is
 # "bump the tag, recreate" with no file to transfer by hand.
 #
-# It needs two repository secrets, under
-# Settings -> Secrets and variables -> Actions -> New repository secret:
+# It needs two repository settings, from the two different tabs under
+# Settings -> Secrets and variables -> Actions:
 #
-#   DOCKERHUB_USERNAME   your Docker Hub account name
-#   DOCKERHUB_TOKEN      an access token with **Read & write** permission, from
-#                        Docker Hub -> Account settings -> Personal access tokens.
-#                        Use a token, never the account password: it can be revoked
-#                        on its own, and it is the only thing this workflow stores.
+#   Variables tab:  DOCKERHUB_USERNAME   your Docker Hub account name
+#   Secrets tab:    DOCKERHUB_TOKEN      an access token with **Read & write**
+#                                        permission, from Docker Hub ->
+#                                        Account settings -> Personal access tokens.
+#                                        Use a token, never the account password: it
+#                                        can be revoked on its own, and it is the
+#                                        only credential this stores.
 #
-# The image name is built from DOCKERHUB_USERNAME rather than written here, so the
-# account name lives in one secret rather than in the repository.
+# The username is a variable rather than a secret on purpose. It is not sensitive,
+# and a value kept in a secret is masked in the logs -- including this workflow's
+# own summary, which would print "docker.io/***/sharesies-dashboard" instead of the
+# image it just pushed.
 #
 # Two deliberate choices:
 #
@@ -66,21 +70,22 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      IMAGE: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/sharesies-dashboard
+      IMAGE: docker.io/${{ vars.DOCKERHUB_USERNAME }}/sharesies-dashboard
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check the Docker Hub secrets are set
+      - name: Check the Docker Hub settings are in place
         env:
-          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
           DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
         run: |
           if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
-            echo "::error::DOCKERHUB_USERNAME and DOCKERHUB_TOKEN are not both set."
-            echo "Create an access token with Read & write permission at"
-            echo "https://hub.docker.com/settings/security, then add both under"
-            echo "Settings -> Secrets and variables -> Actions."
+            echo "::error::The Docker Hub settings are not both in place."
+            echo "Variables tab: DOCKERHUB_USERNAME  (your Docker Hub account name)"
+            echo "Secrets tab:   DOCKERHUB_TOKEN     (an access token with Read & write,"
+            echo "                                    from https://hub.docker.com/settings/security)"
+            echo "Both live under Settings -> Secrets and variables -> Actions."
             exit 1
           fi
 

@@ -236,8 +236,12 @@ Set it up once:
 1. Create an access token at <https://hub.docker.com/settings/security> with **Read &
    write** permission. Not the account password: a token can be revoked on its own, and it
    is the only credential this stores.
-2. Add both as repository secrets under **Settings → Secrets and variables → Actions**:
-   `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
+2. Under **Settings → Secrets and variables → Actions**, add the two settings — note the
+   two different tabs:
+   * **Variables** tab: `DOCKERHUB_USERNAME` = your Docker Hub account name. It is not
+     sensitive, and a value held as a secret is masked in the logs, including this
+     workflow's own summary.
+   * **Secrets** tab: `DOCKERHUB_TOKEN` = the token from step 1.
 3. Push to `main`. The run's summary names the tag it published.
 
 Each run tests first (typecheck and the suite on Node 24), so an image is only published
