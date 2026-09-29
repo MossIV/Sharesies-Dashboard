@@ -166,6 +166,11 @@ paths, ports and volumes — so only the templates are tracked:
 | `docker-compose.example.yml` | local |
 | `deploy/qnap/docker-compose.example.yml` | QNAP Container Station, with the full walkthrough in `deploy/qnap/README.md` |
 
+The image itself is built either on this machine (`npm run image:nas`, which exports a tar
+Container Station can import, or `npm run image:push` for a registry) or by CI:
+`.github/workflows/publish-image.yml` tests the commit and pushes the image to Docker Hub
+on a push to `main`.
+
 A fresh clone has no working compose file and `docker compose up` fails with "no
 configuration file provided", which reads like a missing file rather than a missing step.
 

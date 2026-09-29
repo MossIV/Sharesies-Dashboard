@@ -241,8 +241,9 @@ Running locally is the default and nothing needs changing for it.
 
 For the NAS there is a `Dockerfile` and a compose template; on a QNAP, follow
 [`deploy/qnap/`](deploy/qnap/README.md) instead, which gives the paths to use, how to get
-the image across (a tar by default; a registry is documented as an option), the
-folder-ownership trap, and what the startup log must say.
+the image across (a tar by default; a registry, or a GitHub Actions workflow that publishes
+to one, are documented as the lighter options), the folder-ownership trap, and what the
+startup log must say.
 
 Compose files are not tracked: a working one carries host-specific paths and volumes.
 The templates are, and you copy the one that applies:

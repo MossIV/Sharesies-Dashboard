@@ -1,0 +1,129 @@
+# Build the dashboard image and push it to Docker Hub, so updating the NAS is
+# "bump the tag, recreate" with no file to transfer by hand.
+#
+# It needs two repository secrets, under
+# Settings -> Secrets and variables -> Actions -> New repository secret:
+#
+#   DOCKERHUB_USERNAME   your Docker Hub account name
+#   DOCKERHUB_TOKEN      an access token with **Read & write** permission, from
+#                        Docker Hub -> Account settings -> Personal access tokens.
+#                        Use a token, never the account password: it can be revoked
+#                        on its own, and it is the only thing this workflow stores.
+#
+# The image name is built from DOCKERHUB_USERNAME rather than written here, so the
+# account name lives in one secret rather than in the repository.
+#
+# Two deliberate choices:
+#
+#   * Provenance and SBOM attestations are off. Newer builders attach them by
+#     default, which turns the push into a manifest list with extra manifests
+#     beside the image. Container Station's Docker is not guaranteed to understand
+#     that, and what the NAS wants is one plain amd64 image.
+#   * `latest` only moves on main. A manual run from another branch publishes the
+#     sha tag and leaves `latest` alone, so a half-finished branch cannot become
+#     what the NAS pulls next.
+#
+# Pin the sha tag in the compose file on the NAS. Container Station decides what to
+# pull when the application is created, and a tag it already has locally is not
+# re-fetched, so `latest` tends to keep running the old image.
+name: Publish image
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never cancel a half-finished push. An interrupted push can leave a tag with no
+  # image behind it, which is a worse state than a slow one.
+  group: publish-image-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # The project's own floor: import.meta.main, which every entry point uses,
+          # needs 24.2 or newer.
+          node-version: "24"
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  publish:
+    name: Build and push
+    needs: verify
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/sharesies-dashboard
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the Docker Hub secrets are set
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -z "$DOCKERHUB_USERNAME" ] || [ -z "$DOCKERHUB_TOKEN" ]; then
+            echo "::error::DOCKERHUB_USERNAME and DOCKERHUB_TOKEN are not both set."
+            echo "Create an access token with Read & write permission at"
+            echo "https://hub.docker.com/settings/security, then add both under"
+            echo "Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Work out the tags
+        id: tags
+        run: |
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          TAGS="${IMAGE}:${SHORT_SHA}"
+          if [ "$GITHUB_REF_NAME" = "main" ]; then TAGS="${TAGS},${IMAGE}:latest"; fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "Pushing ${TAGS}"
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          # The NAS is x86_64. Building for one platform keeps this a plain image
+          # rather than a manifest list.
+          platforms: linux/amd64
+          provenance: false
+          sbom: false
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          {
+            echo "### Pushed"
+            echo
+            echo '```'
+            echo "${IMAGE}:${{ steps.tags.outputs.short_sha }}"
+            echo '```'
+            echo
+            echo "On the NAS, set the compose file's image line to that tag, then recreate"
+            echo "the application. Back up the database first: the image migrates it at"
+            echo "startup, and the history is the only copy."
+          } >> "$GITHUB_STEP_SUMMARY"

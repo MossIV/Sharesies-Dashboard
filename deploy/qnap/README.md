@@ -225,6 +225,34 @@ thing to decide:
   happens to be. Whatever you pin to, a pull only takes effect when the application is
   recreated.
 
+### Option D — let CI build and push it (the least work per update)
+
+The workflow in `.github/workflows/publish-image.yml` builds the image on GitHub and pushes
+it to Docker Hub, so nothing is built, copied or tagged on this machine. Updating becomes:
+push the code, wait for the run, recreate the application on the NAS.
+
+Set it up once:
+
+1. Create an access token at <https://hub.docker.com/settings/security> with **Read &
+   write** permission. Not the account password: a token can be revoked on its own, and it
+   is the only credential this stores.
+2. Add both as repository secrets under **Settings → Secrets and variables → Actions**:
+   `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`.
+3. Push to `main`. The run's summary names the tag it published.
+
+Each run tests first (typecheck and the suite on Node 24), so an image is only published
+from a commit that passes. It builds `linux/amd64` — the NAS's architecture — with
+provenance and SBOM attestations switched off, because those turn the push into a manifest
+list with extra manifests beside the image and Container Station's Docker is not guaranteed
+to understand that.
+
+It tags every run with the git short sha and moves `latest` only on `main`, so a run from a
+branch cannot become what the NAS pulls next. The NAS side is exactly Option C above: pin
+the sha tag in the compose file and recreate the application.
+
+If the secrets are missing the run fails at a step that says which two to add, before it
+tries to log in.
+
 ---
 
 ## 3. Start it
