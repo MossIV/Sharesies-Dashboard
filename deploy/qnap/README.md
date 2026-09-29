@@ -63,6 +63,19 @@ Copy `.env` across as well — it is git-ignored, so it will not arrive with the
 
 ### Option A — build locally, then load the tar (x86 NAS)
 
+```bash
+npm run image:nas            # builds, exports the tar, verifies it, writes a sha256
+```
+
+That is the whole procedure. It ends with the archive, its checksum and a `.txt` note
+beside it in `dist/nas/`, naming the image tag, the commit it was built from and the
+commands for the NAS side. Copy the tar and the `.sha256`, verify the copy, load it,
+recreate the application. `--out DIR` puts the files elsewhere; `--platform linux/arm64`
+builds for an ARM NAS.
+
+The rest of this section is what the script does and why each part matters, for when
+something needs doing by hand.
+
 The archive format matters more than the extension, and this is the step that failed
 first. Container Station's importer accepts `*.tar, *.tar.gz, *.tgz` but only understands
 the **legacy `docker save` layout**: `manifest.json`, a `repositories` file, and one
@@ -75,14 +88,16 @@ that. `docker save` writes an OCI archive (`oci-layout`, `index.json`,
 **"Invalid File Format"**, which is a misleading message: the file is a perfectly valid
 archive, just not the shape it wants.
 
-Convert it with a throwaway daemon that uses the classic store:
+The script asks the daemon which store it has (`docker info --format '{{.Driver}}'`, where
+`overlay2` is the classic store and anything else is not) and converts only when it has to,
+through a throwaway daemon that uses the classic store:
 
 ```bash
 # on the Windows machine, in the repo
 docker build -t sharesies-dashboard:latest .
 
 S="$PWD"   # or any folder; it is shared with the container below
-docker run -d --privileged --name dind-convert -v "$S:/work" docker:24-dind
+docker run -d --privileged --name dind-convert docker:24-dind
 # its entrypoint starts dockerd itself -- do not run dockerd by hand, the readiness
 # loop hangs and the whole thing sits there looking busy
 
@@ -118,8 +133,9 @@ sha256sum /share/<SHARE>/sharesies/sharesies-dashboard.tar
 
 The alternative to all of this, if the conversion is tedious: turn off **Settings →
 General → Use containerd for pulling and storing images** in Docker Desktop, restart it,
-rebuild, and `docker save` writes the legacy format directly. It is a global setting for
-every project on the machine, which is why the throwaway daemon is documented first.
+rebuild, and `docker save` writes the legacy format directly. The script reads the same
+setting and skips the conversion when it is off. It is a global setting for every project
+on the machine, which is why the throwaway daemon is the default.
 
 ### Option B — build on the NAS
 
@@ -131,12 +147,23 @@ cd /share/<SHARE>/sharesies-dashboard
 docker build -t sharesies-dashboard:latest .
 ```
 
-### Option C — publish to a registry and pull (not used yet)
+### Option C — publish to a registry and pull (the lighter update path)
 
-Kept here because it is the better workflow *if* you ever rebuild often: updating becomes
-"push, then recreate the application" instead of copying a 64 MB file by hand. It was not
-used for the first deployment because it adds a registry account and stored credentials
-for no gain on a personal app that changes occasionally.
+Updating becomes "push, then recreate the application" instead of copying a 64–200 MB file
+by hand, and a rollback becomes an edit to one line of the compose file rather than a
+re-import. It was not used for the first deployment because it adds a registry account and
+stored credentials for no gain on a personal app that changes occasionally — but if the
+app changes more than a couple of times, it is less work per update, not more.
+
+```bash
+npm run image:push -- --registry ghcr.io/<user>/sharesies-dashboard
+```
+
+That builds, tags the image with the git short sha and `latest`, pushes both, and prints the
+`image:` line to paste into the compose file. It needs `docker login` first, which is yours
+to do: tokens are not shared with the script or the agent.
+
+By hand, it is the same three commands:
 
 ```bash
 # on the Windows machine, in the repo
