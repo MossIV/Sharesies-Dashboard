@@ -3,7 +3,7 @@ import {
   api,
   nzd,
   type AccountList,
-  type Contribution,
+  type ContributionList,
   type DumpCounts,
   type Holdings,
   type ImportRecord,
@@ -33,10 +33,11 @@ interface Data {
   imports: ImportRecord[];
   counts: DumpCounts | null;
   notifications: NotificationStatus | null;
-  contributions: { contributions: Contribution[]; total: number; totalAllTime: number };
+  contributions: ContributionList;
   projection: Projection;
   settings: Settings;
 }
+
 
 export default function App() {
   const [data, setData] = useState<Data | null>(null);
@@ -228,7 +229,9 @@ export default function App() {
         <ContributionsChart series={series} contributions={contributions.contributions} />
         <ContributionLog
           contributions={contributions.contributions}
+          accounts={accounts.accounts}
           totalAllTime={contributions.totalAllTime}
+          excludedTotalAllTime={contributions.excludedTotalAllTime}
           onAdd={async (body) => {
             await api.addContribution(body);
             await load();

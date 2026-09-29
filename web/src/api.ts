@@ -110,14 +110,49 @@ export interface Holdings {
   }[];
 }
 
+/**
+ * A contribution, as the API returns it.
+ *
+ * `amountNzd` is the canonical figure; `currency`/`amountOriginal`/`fxRate` are
+ * carried so a converted row can be checked rather than taken on trust, and
+ * `accountId` is what decides whether the row belongs to the goal.
+ */
 export interface Contribution {
   id: number;
   contributionDate: string;
   amountNzd: number;
   note: string | null;
   source: "manual" | "csv" | "bank";
+  externalRef: string | null;
   createdAt: string;
+  accountId: string | null;
+  currency: string;
+  amountOriginal: number | null;
+  fxRate: number | null;
+  /** buy | sell | deposit | withdrawal | dividend | fee | interest | transfer */
+  category: string | null;
+  /** Whether the goal counts this row; decided server-side, once. */
+  inGoal: boolean;
 }
+
+/** The chart's series: value = contributions + growth, per snapshot date. */
+export interface ContributionSeries {
+  rows: { date: string; value: number; contributions: number; growth: number }[];
+  belowContributions: boolean;
+  maxShortfall: number;
+  latest: { date: string; value: number; contributions: number; growth: number } | null;
+}
+
+export interface ContributionList {
+  contributions: Contribution[];
+  total: number;
+  totalAllTime: number;
+  excludedTotalAllTime: number;
+  counts: { all: number; inGoal: number; excluded: number };
+  series: ContributionSeries;
+  scope: "goal";
+}
+
 
 export interface Projection {
   disclaimer: string;
@@ -313,6 +348,8 @@ export interface DumpCounts {
   holdings: number;
   contributions: number;
   netContributions: number;
+  /** Everything, including contributions outside the goal. */
+  netContributionsAll: number;
 }
 
 export interface Settings {
@@ -377,9 +414,7 @@ export const api = {
   summary: () => request<Summary>("/api/summary"),
   snapshots: () => request<SnapshotSeries>("/api/snapshots"),
   holdings: () => request<Holdings>("/api/holdings/latest"),
-  contributions: () => request<{ contributions: Contribution[]; total: number; totalAllTime: number }>(
-    "/api/contributions",
-  ),
+  contributions: () => request<ContributionList>("/api/contributions"),
   projection: (params: { return?: number; monthly?: number; months?: number }) => {
     const query = new URLSearchParams();
     if (params.return !== undefined) query.set("return", String(params.return));
