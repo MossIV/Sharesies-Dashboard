@@ -22,10 +22,24 @@ echo "  database: ${resolved_db}"
 echo "  backups:  ${BACKUP_DIR:-/backups}"
 echo "  schedule: ${SCHEDULE_HOUR_NZ:-7}:$(printf '%02d' "${SCHEDULE_MINUTE_NZ:-0}") ${SCHEDULE_TIME_ZONE:-Pacific/Auckland}"
 
-node --env-file-if-exists=.env src/scheduler/run.ts &
+# Only pass --env-file when there is one to read. In a container there usually is
+# not: compose's `env_file` injects the variables into the environment, so the file
+# never exists inside the image, and the flag printed ".env not found. Continuing
+# without it." twice — which reads like a warning about missing tokens when nothing
+# is actually wrong.
+env_flag=""
+if [ -f .env ]; then
+  env_flag="--env-file=.env"
+else
+  echo "  settings: from the environment (no .env file inside the container)"
+fi
+
+# shellcheck disable=SC2086  # the flag is intentionally word-split, empty or one word
+node $env_flag src/scheduler/run.ts &
 scheduler_pid=$!
 
-node --env-file-if-exists=.env src/api/server.ts &
+# shellcheck disable=SC2086
+node $env_flag src/api/server.ts &
 api_pid=$!
 
 stopping=0

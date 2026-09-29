@@ -219,11 +219,19 @@ Sharesies dashboard
   database: /data/sharesies.db
   backups:  /backups
   schedule: 7:00 Pacific/Auckland
+  settings: from the environment (no .env file inside the container)
 Next run: 07:00 on ... (Pacific/Auckland)
 ```
 
 If that first line does not name a path under `/data`, stop — the database is inside the
 container and a rebuild will lose it.
+
+`settings: from the environment` is the expected line: the tokens reach the container as
+environment variables from compose's `env_file`, so there is no `.env` file inside it. An
+image built before that line existed prints `.env not found. Continuing without it.`
+twice instead — the same thing, worded as if something were wrong. Either way, check
+`dataMode` in `GET /api/summary`: `akahu` means the tokens arrived, `manual` means they
+did not.
 
 Nothing else needs scheduling on the NAS. The daily collection and the backup run inside
 this container at `SCHEDULE_HOUR_NZ`, and the scheduler resolves that time against New
