@@ -167,9 +167,121 @@ export function CsvImportCard({
             ))}
           </p>
 
+          {preview.accounts.length > 0 && (
+            <>
+              <h3 style={{ marginTop: 16, marginBottom: 4 }}>Portfolios in this report</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Portfolio</th>
+                    <th>Account</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.accounts.map((match) => (
+                    <tr key={match.portfolio}>
+                      <td className="tiny mono">{match.portfolio}</td>
+                      <td className="tiny">
+                        {match.accountId === null ? (
+                          <>
+                            <span className="badge warn">no match</span>{" "}
+                            <span className="muted">
+                              {match.status === "ambiguous"
+                                ? `could mean ${match.candidates.join(" or ")}`
+                                : "no account resembles this name"}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            {match.accountName}
+                            {match.status === "partial" && (
+                              <span className="muted tiny"> · matched by name</span>
+                            )}
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <p className="muted tiny">
+                Rows are attributed to the account their portfolio names. A row for an account outside the goal is
+                logged and left out of the goal's contributions.
+              </p>
+            </>
+          )}
+
+          {preview.currencyTotals.length > 0 && (
+            <>
+              <h3 style={{ marginTop: 16, marginBottom: 4 }}>Amounts selected</h3>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Currency</th>
+                    <th className="num">Rows</th>
+                    <th className="num">In that currency</th>
+                    <th className="num">In NZD</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {preview.currencyTotals.map((total) => (
+                    <tr key={total.currency}>
+                      <td className="tiny mono">{total.currency}</td>
+                      <td className="num mono">{total.rows}</td>
+                      <td className="num mono">
+                        {total.currency === "NZD" ? "–" : total.amount.toFixed(2)}
+                      </td>
+                      <td className="num mono">{nzd(total.nzd)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          )}
+
+          {preview.currencyTotals.some((total) => total.currency !== "NZD") && (
+            <p className="muted tiny">
+              {preview.fx.source === "none"
+                ? "Currency conversion is switched off, so no non-NZD row can be converted."
+                : `Converted with ${preview.fx.source} rates for each row's own trade date` +
+                  `${preview.fx.requests > 0 ? ` (${preview.fx.requests} request(s) this run)` : " (all rates cached)"}` +
+                  ". The rate used is stored on every row."}
+              {preview.fx.unconverted > 0 && (
+                <>
+                  {" "}
+                  <strong>{preview.fx.unconverted} row(s) could not be converted and will be left out.</strong>
+                </>
+              )}
+            </p>
+          )}
+
+          {(preview.outsideGoal > 0 || preview.unattributed > 0 || preview.attributedByDefault > 0) && (
+            <p className="muted tiny">
+              {preview.outsideGoal > 0 && (
+                <>
+                  <strong>{preview.outsideGoal}</strong> row(s) belong to an account outside the goal.
+                </>
+              )}
+              {preview.unattributed > 0 && (
+                <>
+                  {" "}
+                  <strong>{preview.unattributed}</strong> row(s) could not be attributed to an account and are held
+                  out of the goal.
+                </>
+              )}
+              {preview.attributedByDefault > 0 && (
+                <>
+                  {" "}
+                  <strong>{preview.attributedByDefault}</strong> row(s) follow the goal's single account, because
+                  this file names no portfolio.
+                </>
+              )}
+            </p>
+          )}
+
           <p style={{ marginTop: 12 }}>
             <strong>{preview.selected.length}</strong> row(s) selected, totalling{" "}
-            <strong>{nzd(preview.selected.reduce((sum, row) => sum + row.amountNzd, 0))}</strong>
+            <strong>{nzd(preview.selected.reduce((sum, row) => sum + (row.amountNzd ?? row.amount), 0))}</strong>
             {preview.selected.length > 0 && preview.selected[0]?.date && (
               <span className="muted tiny">
                 {" "}
@@ -187,6 +299,7 @@ export function CsvImportCard({
               <tr>
                 <th>Date</th>
                 <th>Description</th>
+                <th>Account</th>
                 <th className="num">Amount</th>
               </tr>
             </thead>
@@ -195,7 +308,22 @@ export function CsvImportCard({
                 <tr key={`${row.externalRef}`}>
                   <td className="mono tiny">{row.date ?? "?"}</td>
                   <td className="tiny">{row.description}</td>
-                  <td className="num mono">{nzd(row.amountNzd)}</td>
+                  <td className="tiny">
+                    {row.accountName ?? <span className="muted">unattributed</span>}
+                    {!row.accountInScope && (
+                      <span className="badge warn" style={{ marginLeft: 6 }}>
+                        outside goal
+                      </span>
+                    )}
+                  </td>
+                  <td className="num mono">
+                    {nzd(row.amountNzd)}
+                    {row.currency !== "NZD" && (
+                      <div className="muted tiny">
+                        {row.currency} {row.amount.toFixed(2)} @ {row.fxRate}
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>

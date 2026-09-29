@@ -54,7 +54,7 @@ export function importRoutes(db: DatabaseSync) {
     const dateFormat = optEnum(body, "dateFormat", DATE_FORMATS);
     const categories = reqCategories(body);
 
-    const outcome = importSharesiesReport(db, {
+    const outcome = await importSharesiesReport(db, {
       csv,
       filename: filename ?? null,
       mode,
@@ -79,7 +79,15 @@ export function importRoutes(db: DatabaseSync) {
         dateAmbiguous: outcome.plan.dateAmbiguous,
         raggedRows: outcome.plan.raggedRows,
         counts: outcome.plan.counts,
+        currencies: outcome.plan.currencies,
+        portfolios: outcome.plan.portfolios,
       },
+      // Which portfolio each row belongs to, and whether the account is in the goal.
+      accounts: outcome.accounts,
+      currencyTotals: outcome.currencyTotals,
+      fx: outcome.fx,
+      outsideGoal: outcome.outsideGoal,
+      unattributed: outcome.unattributed,
       warnings: outcome.warnings,
       // Every row, so the UI can show what was found and what was ignored.
       transactions: outcome.transactions,

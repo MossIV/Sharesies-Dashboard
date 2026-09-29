@@ -56,7 +56,7 @@ function parseArgs(argv: string[]): Args {
   return args;
 }
 
-function main(): void {
+async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   if (!args.file) {
     console.error("Usage: npm run import:csv -- --file <report.csv> [--apply] [--categories deposit,buy]");
@@ -69,7 +69,7 @@ function main(): void {
   const db = openDb();
   migrate(db);
 
-  const outcome = importSharesiesReport(db, {
+  const outcome = await importSharesiesReport(db, {
     csv,
     filename: filePath,
     mode: args.apply ? "apply" : "preview",
@@ -89,6 +89,22 @@ function main(): void {
   const counts = Object.entries(outcome.plan.counts).filter(([, count]) => count > 0);
   console.log(`  found: ${counts.map(([category, count]) => `${category} ${count}`).join(", ") || "nothing"}`);
 
+  const currencies = Object.entries(outcome.plan.currencies);
+  if (currencies.length > 0) {
+    console.log(`  currencies: ${currencies.map(([code, count]) => `${code} ${count}`).join(", ")}` +
+      (outcome.fx.source === "none" ? "" : ` (converted via ${outcome.fx.source}, ${outcome.fx.requests} request(s))`));
+  }
+
+  if (outcome.accounts.length > 0) {
+    console.log("  portfolios:");
+    for (const match of outcome.accounts) {
+      const where = match.accountId === null
+        ? `NO MATCH (${match.status}${match.candidates.length > 0 ? `: ${match.candidates.join(", ")}` : ""})`
+        : match.accountName;
+      console.log(`    ${match.portfolio.padEnd(24)} -> ${where}`);
+    }
+  }
+
   if (outcome.plan.unrecognisedColumns.length > 0) {
     console.log(`  ignored columns: ${outcome.plan.unrecognisedColumns.join(", ")}`);
   }
@@ -96,11 +112,18 @@ function main(): void {
   console.log("\n  rows that would become contributions:");
   if (outcome.selected.length === 0) console.log("    (none)");
   for (const row of outcome.selected) {
+    const amount = row.currency === "NZD" || row.amountNzd === null ? { value: row.amountNzd ?? row.amount, text: "" } : { value: row.amountNzd, text: `${row.currency} ${row.amount} @ ${row.fxRate}` };
+    const target = row.accountName ? `  ${row.accountName}${row.accountInScope ? "" : " (outside the goal)"}` : "  (unattributed)";
     console.log(
-      `    ${row.date ?? "??????????"}  ${nzd(row.amountNzd).padStart(11)}  ` +
-        `${row.category.padEnd(7)}  ${row.description}`,
+      `    ${row.date ?? "??????????"}  ${nzd(amount.value).padStart(11)}  ` +
+        `${row.category.padEnd(7)}  ${row.description}${target}${amount.text ? `  [${amount.text}]` : ""}`,
     );
   }
+
+  if (outcome.fx.unconverted > 0) {
+    console.log(`\n  ${outcome.fx.unconverted} row(s) could not be converted and were left out.`);
+  }
+  if (outcome.outsideGoal > 0) console.log(`  ${outcome.outsideGoal} row(s) belong to an account outside the goal.`);
 
   const ignored = outcome.transactions.length - outcome.selected.length;
   if (ignored > 0) console.log(`\n  ${ignored} row(s) not selected for import.`);
@@ -119,4 +142,4 @@ function main(): void {
   db.close();
 }
 
-main();
+await main();

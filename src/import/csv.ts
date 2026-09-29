@@ -130,6 +130,13 @@ export function normaliseHeader(value: string): string {
 
 const COLUMN_SYNONYMS = {
   date: ["date", "transactiondate", "tradedate", "settlementdate", "createddate", "time", "timestamp"],
+  // The provider's own row identifier, when the export carries one. Preferred over
+  // a content hash as the idempotency key: two genuinely identical trades can
+  // occur (a same-day buy and sell of the same amount in the same fund), and a
+  // hash would silently drop one of them on a re-import. Deliberately narrow —
+  // a generic "reference" column is often shared by unrelated rows, and treating
+  // that as unique would drop real contributions instead of duplicates.
+  id: ["tradeid", "transactionid", "orderid"],
   type: ["type", "transactiontype", "ordertype", "action", "activity", "direction"],
   description: ["description", "details", "narrative", "memo", "note", "notes", "transaction", "reason"],
   amount: ["amount", "value", "amountnzd", "nzdamount", "netamount", "total", "transactionamount", "cashamount"],
@@ -137,8 +144,20 @@ const COLUMN_SYNONYMS = {
   units: ["units", "quantity", "shares", "unitbalance", "unitsheld"],
   price: ["price", "unitprice", "shareprice", "rate"],
   symbol: ["symbol", "ticker", "code", "instrumentcode", "isin", "fundcode"],
-  instrument: ["instrument", "fund", "security", "company", "name", "investment"],
+  // "instrumentname" is listed first on purpose. A Sharesies report has both
+  // "Instrument code" and "Instrument name", and the loose pass below would
+  // otherwise settle on the code — which is how a 997-row import produced notes
+  // reading "BUY · 24112" instead of the fund's name.
+  instrument: ["instrumentname", "instrument", "fundname", "fund", "security", "company", "name", "investment"],
+  // The report's amounts are not all NZD, and the currency is stated per row.
+  currency: ["currency", "currencycode", "ccy"],
+  // The report's Portfolio column names the account a trade belongs to. Bare
+  // "account" is deliberately absent: "Account balance" is a balance column, and
+  // letting one header fill two roles would silently mis-attribute a report.
+  portfolio: ["portfolio", "portfolioname", "accountname"],
+  fee: ["transactionfee", "fee", "fees", "commission", "brokerage"],
 } as const;
+
 
 export type ColumnRole = keyof typeof COLUMN_SYNONYMS;
 
@@ -374,6 +393,19 @@ export function parseNumberCell(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+/**
+ * A three-letter ISO code from a row's currency cell, or null when the cell says
+ * something that is not a currency.
+ *
+ * Returns null rather than a guess: an amount whose currency is unknown cannot be
+ * converted, and defaulting to NZD is exactly the silent error this is here to
+ * prevent. Strips symbols and spaces so "nzd", "NZD " and "$NZ" all read as NZD.
+ */
+export function parseCurrencyCell(value: string): string | null {
+  const text = (value ?? "").trim().toUpperCase().replace(/[^A-Z]/g, "");
+  return /^[A-Z]{3}$/.test(text) ? text : null;
+}
+
 // ---------------------------------------------------------------------- planner
 
 export interface ImportCandidate {
@@ -383,11 +415,32 @@ export interface ImportCandidate {
   date: string | null;
   description: string;
   category: RowCategory;
-  amountNzd: number;
+  /**
+   * The amount with the sign the category implies, in the row's **own** currency.
+   *
+   * Deliberately not called NZD: a report can hold NZD, USD and AUD rows in one
+   * file, and this layer is pure so it has no rate to apply. Conversion happens in
+   * the import, which stores the rate it used.
+   */
+  amount: number;
+  /** The file's figure, un-re-signed and unconverted. */
+  amountOriginal: number | null;
+  /** ISO code, uppercase. NZD when the file states nothing. */
+  currency: string;
+  /** What the row's Portfolio cell said, if the file has one. */
+  portfolio: string | null;
+  /** The instrument's name, when the file names one. */
+  instrumentName: string | null;
+  /**
+   * The stated transaction fee. Recorded for the report but not turned into a
+   * contribution: a fee is a cost inside the portfolio, not money moved into it.
+   */
+  fee: number | null;
   /** Why the row was classified this way, or why it is unusable. */
   reason: string;
   problem: string | null;
 }
+
 
 export interface ImportPlan {
   delimiter: string;
@@ -398,6 +451,10 @@ export interface ImportPlan {
   dateAmbiguous: boolean;
   raggedRows: number;
   counts: Record<RowCategory, number>;
+  /** Row counts per currency, uppercase: { NZD: 736, USD: 280 }. */
+  currencies: Record<string, number>;
+  /** The distinct Portfolio values the file names, for account matching. */
+  portfolios: string[];
   candidates: ImportCandidate[];
   warnings: string[];
 }
@@ -493,8 +550,12 @@ export function buildImportPlan(parsed: ParsedCsv, options: PlanOptions = {}): I
   }
 
   const counts = EMPTY_COUNTS();
+  const currencies: Record<string, number> = {};
+  const portfolios = new Set<string>();
   const candidates: ImportCandidate[] = [];
   let sawNonDeposit = false;
+  let unreadableCurrencies = 0;
+  let statedForeignCurrency = false;
 
   parsed.rows.forEach((row, index) => {
     const type = cellsAt(row, "type");
@@ -505,31 +566,88 @@ export function buildImportPlan(parsed: ParsedCsv, options: PlanOptions = {}): I
 
     const dateResult = parseDateCell(cellsAt(row, "date"), detected.format);
     const rawAmount = parseAmountCell(cellsAt(row, "amount"));
-    const instrument = cellsAt(row, "instrument") || cellsAt(row, "symbol");
+    // The instrument's name, falling back to its code: "Buy 24112" is not a note
+    // anyone can read.
+    const instrumentName = cellsAt(row, "instrument") || cellsAt(row, "symbol") || null;
+    const portfolio = cellsAt(row, "portfolio") || null;
+    const fee = parseAmountCell(cellsAt(row, "fee"));
+
+    // No currency column means the file states nothing, and every such report seen
+    // so far is NZD, so that is the assumption — but it is reported rather than
+    // left implicit, because assuming it silently is how a USD row becomes a 1.76x
+    // overstatement.
+    const currencyCell = cellsAt(row, "currency");
+    const parsedCurrency = parseCurrencyCell(currencyCell);
+    const currency = parsedCurrency ?? "NZD";
+    if (currencyCell !== "" && parsedCurrency === null) unreadableCurrencies += 1;
+    if (parsedCurrency !== null && parsedCurrency !== "NZD") statedForeignCurrency = true;
+    currencies[currency] = (currencies[currency] ?? 0) + 1;
+    if (portfolio) portfolios.add(portfolio);
 
     let problem: string | null = null;
     if (dateResult.date === null) problem = "Could not read the date.";
     else if (rawAmount === null) problem = "Could not read the amount.";
+    else if (currencyCell !== "" && parsedCurrency === null) {
+      problem = `Could not read the currency ("${currencyCell}").`;
+    }
 
-    const amountNzd = rawAmount === null ? 0 : contributionAmount(category, rawAmount);
+    const amount = rawAmount === null ? 0 : contributionAmount(category, rawAmount);
+    const rowId = cellsAt(row, "id");
 
     candidates.push({
-      externalRef: hashRef([
-        dateResult.date ?? cellsAt(row, "date"),
-        type,
-        description,
-        rawAmount ?? "",
-        instrument,
-      ]),
+      // The provider's own identifier when there is one, so re-importing identical
+      // rows is safe; a content hash otherwise, which cannot tell two genuinely
+      // identical trades apart.
+      externalRef: rowId !== ""
+        ? `csv:id:${rowId}`
+        : hashRef([
+          dateResult.date ?? cellsAt(row, "date"),
+          type,
+          description,
+          rawAmount ?? "",
+          instrumentName ?? "",
+          portfolio ?? "",
+          currency,
+        ]),
       rowNumber: index + 2, // +2: the header is line 1
       date: dateResult.date,
-      description: [description, instrument].filter(Boolean).join(" · ").slice(0, 200),
+      description: [description, instrumentName].filter(Boolean).join(" · ").slice(0, 200),
       category,
-      amountNzd,
+      amount,
+      amountOriginal: rawAmount,
+      currency,
+      portfolio,
+      instrumentName,
+      fee: fee === null ? null : Math.abs(fee),
       reason: matched ? `matched "${matched}"` : "no keyword matched",
       problem,
     });
   });
+
+  if (columns.currency === undefined) {
+    warnings.push(
+      "No currency column was recognised, so every amount is treated as NZD. " +
+        "That is right for a Sharesies portfolio held in NZD, and wrong for a report " +
+        "that holds trades in another currency.",
+    );
+  } else if (unreadableCurrencies > 0) {
+    warnings.push(
+      `${unreadableCurrencies} row(s) state a currency that could not be read, so they cannot be converted and will not be imported.`,
+    );
+  }
+  if (statedForeignCurrency) {
+    warnings.push(
+      "This file holds rows in more than one currency. Each row is converted to NZD at the " +
+        "rate published for its own trade date, and the rate used is recorded on the row.",
+    );
+  }
+  if (columns.portfolio === undefined) {
+    warnings.push(
+      "No portfolio column was recognised, so rows cannot be attributed from the file itself. They follow the " +
+        "goal's account when it tracks exactly one; otherwise they are imported unattributed, and an unattributed " +
+        "row from a report does not count toward the goal.",
+    );
+  }
 
   if (wanted.has("deposit") && counts.deposit === 0 && sawNonDeposit) {
     warnings.push(
@@ -548,6 +666,8 @@ export function buildImportPlan(parsed: ParsedCsv, options: PlanOptions = {}): I
     dateAmbiguous: detected.ambiguous,
     raggedRows: parsed.raggedRows,
     counts,
+    currencies,
+    portfolios: [...portfolios].sort(),
     candidates,
     warnings,
   };

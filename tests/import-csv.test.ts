@@ -185,7 +185,7 @@ describe("buildImportPlan on the sample report", () => {
   test("imports deposits only, by default", () => {
     const rows = importableRows(plan);
     assert.equal(rows.length, 4);
-    assert.deepEqual(rows.map((row) => row.amountNzd), [500, 500, 500, 750]);
+    assert.deepEqual(rows.map((row) => row.amount), [500, 500, 500, 750]);
     assert.deepEqual(rows.map((row) => row.date), [
       "2026-01-15", "2026-02-15", "2026-03-15", "2026-05-15",
     ]);
@@ -195,15 +195,15 @@ describe("buildImportPlan on the sample report", () => {
     const rows = importableRows(plan, { categories: ["deposit", "buy"] });
     assert.equal(rows.length, 6);
     const buy = rows.find((row) => row.category === "buy");
-    assert.equal(buy?.amountNzd, 250, "a -250 buy is money entering the portfolio");
+    assert.equal(buy?.amount, 250, "a -250 buy is money entering the portfolio");
   });
 
   test("a withdrawal stays negative, because the log's total is net contributions", () => {
     const [row] = importableRows(plan, { categories: ["withdrawal"] });
-    assert.equal(row?.amountNzd, -200);
+    assert.equal(row?.amount, -200);
 
     const [fee] = importableRows(plan, { categories: ["fee"] });
-    assert.equal(fee?.amountNzd, -1.35);
+    assert.equal(fee?.amount, -1.35);
   });
 
   test("a sell is money leaving the portfolio", () => {
@@ -286,12 +286,12 @@ describe("buildImportPlan on the variant layout", () => {
     const rows = importableRows(plan);
     assert.equal(rows.length, 2);
     assert.deepEqual(rows.map((row) => row.date), ["2026-04-03", "2026-04-07"]);
-    assert.deepEqual(rows.map((row) => row.amountNzd), [400, 400]);
+    assert.deepEqual(rows.map((row) => row.amount), [400, 400]);
   });
 
   test("a bracketed negative is read as a negative, and the buy is not a deposit", () => {
     const buy = plan.candidates.find((candidate) => candidate.category === "buy");
-    assert.equal(buy?.amountNzd, 350);
+    assert.equal(buy?.amount, 350);
     assert.equal(buy?.date, "2026-04-05");
   });
 

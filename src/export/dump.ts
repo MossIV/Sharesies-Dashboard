@@ -67,7 +67,9 @@ export function buildDump(db: DatabaseSync): Dump {
     // Holdings are only stored for the latest snapshot per account, so this is
     // what exists rather than a full holding history.
     holdings: latestHoldings(db),
-    contributions: listContributions(db),
+    // Every contribution, including the ones attributed to an account outside the
+    // goal: a dump is the whole history, not the dashboard's view of it.
+    contributions: listContributions(db, { scope: "all" }),
     imports: listImports(db, 200),
     syncRuns: recentSyncRuns(db, 200),
     settings: Object.fromEntries(
@@ -85,6 +87,8 @@ export function buildDump(db: DatabaseSync): Dump {
     holdings: dump.holdings.length,
     contributions: dump.contributions.length,
     netContributions: netContributions(db),
+    // Everything, including what sits outside the goal, so the two can be told apart.
+    netContributionsAll: netContributions(db, { scope: "all" }),
   };
 
   return dump;
@@ -105,6 +109,7 @@ export function storageCounts(db: DatabaseSync): Dump["counts"] {
     holdings: one("SELECT COUNT(*) AS count FROM holding_snapshots"),
     contributions: one("SELECT COUNT(*) AS count FROM contributions"),
     netContributions: netContributions(db),
+    netContributionsAll: netContributions(db, { scope: "all" }),
   };
 }
 
@@ -127,15 +132,21 @@ export function snapshotsCsv(db: DatabaseSync): string {
 }
 
 export const CONTRIBUTION_COLUMNS = [
-  "contribution_date", "amount_nzd", "source", "note", "external_ref", "created_at",
+  "contribution_date", "amount_nzd", "source", "category", "account_id",
+  "currency", "amount_original", "fx_rate", "note", "external_ref", "created_at",
 ] as const;
 
 export function contributionsCsv(db: DatabaseSync): string {
-  const contributions = listContributions(db);
+  const contributions = listContributions(db, { scope: "all" });
   return toCsv([...CONTRIBUTION_COLUMNS], contributions.map((contribution) => [
     contribution.contributionDate,
     contribution.amountNzd,
     contribution.source,
+    contribution.category ?? "",
+    contribution.accountId ?? "",
+    contribution.currency,
+    contribution.amountOriginal ?? "",
+    contribution.fxRate ?? "",
     contribution.note,
     contribution.externalRef ?? "",
     contribution.createdAt,

@@ -124,7 +124,11 @@ describe("export endpoints", () => {
 
     assert.equal(parsed.header[0], "contribution_date");
     assert.equal(parsed.rows.length, 1);
-    assert.equal(parsed.rows[0]?.[3], 'Note with a comma, a "quote" and a\nnewline');
+    // By header, not by position: the column list grows as the log learns more
+    // about a row, and an index-based assertion silently checks the wrong cell.
+    const note = parsed.header.indexOf("note");
+    assert.ok(note >= 0, `no note column in ${parsed.header.join(", ")}`);
+    assert.equal(parsed.rows[0]?.[note], 'Note with a comma, a "quote" and a\nnewline');
 
     db.close();
   });

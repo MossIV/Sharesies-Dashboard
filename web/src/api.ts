@@ -180,9 +180,37 @@ export interface CsvImportRow {
   date: string | null;
   description: string;
   category: string;
-  amountNzd: number;
+  /** The signed amount in the row's own currency. */
+  amount: number;
+  /** The same figure in NZD; null when it could not be converted. */
+  amountNzd: number | null;
+  currency: string;
+  fxRate: number | null;
+  rateDate: string | null;
   balance: number | null;
   externalRef: string;
+  /** The report's Portfolio value for this row. */
+  portfolio: string | null;
+  accountId: string | null;
+  accountName: string | null;
+  accountInScope: boolean;
+  fee: number | null;
+}
+
+export interface PortfolioMatch {
+  portfolio: string;
+  accountId: string | null;
+  accountName: string | null;
+  status: "exact" | "partial" | "ambiguous" | "none";
+  candidates: string[];
+}
+
+export interface CurrencyTotal {
+  currency: string;
+  rows: number;
+  amount: number;
+  nzd: number;
+  rates: number[];
 }
 
 export interface CsvImportResult {
@@ -200,9 +228,21 @@ export interface CsvImportResult {
     dateAmbiguous: boolean;
     raggedRows: number;
     counts: Record<string, number>;
+    currencies: Record<string, number>;
+    portfolios: string[];
   };
+  /** The report's portfolios, and the account each resolved to. */
+  accounts: PortfolioMatch[];
+  currencyTotals: CurrencyTotal[];
+  fx: { source: string; requests: number; unconverted: number; errors: string[] };
+  /** Selected rows belonging to an account outside the goal. */
+  outsideGoal: number;
+  /** Selected rows with no account at all. */
+  unattributed: number;
+  attributedByDefault: number;
   warnings: string[];
 }
+
 
 export interface ImportRecord {
   id: number;

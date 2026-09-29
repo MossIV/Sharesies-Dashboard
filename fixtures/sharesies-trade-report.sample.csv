@@ -1,0 +1,7 @@
+Trade ID,Trade date,Instrument code,Instrument name,Market code,Quantity,Price,Transaction type,Currency,Amount,Transaction fee,Transaction method,Portfolio,Initiated by
+sample-trade-0001,2026-03-02 21:00:00.000000 (UTC),VGS,Vanguard International Shares ETF,NZX,10,25.00,BUY,nzd,250.00,0.50,BUY,High-growth portfolio,SAMPLE HOLDER
+sample-trade-0002,2026-03-03 21:00:00.000000 (UTC),AAPL,Apple Inc,NASDAQ,2,150.00,BUY,usd,300.00,0.00,BUY,Investments,SAMPLE HOLDER
+sample-trade-0003,2026-03-05 21:00:00.000000 (UTC),VGS,Vanguard International Shares ETF,NZX,4,26.00,SELL,nzd,104.00,0.20,SELL,High-growth portfolio,SAMPLE HOLDER
+sample-trade-0004,2026-03-05 21:00:00.000000 (UTC),MSFT,Microsoft Corp,NASDAQ,1,400.00,SELL,usd,400.00,1.00,SELL,Investments,SAMPLE HOLDER
+sample-trade-0005,2026-03-08 21:00:00.000000 (UTC),KO,Coca-Cola Co,NYSE,0.5,60.00,BUY,usd,30.00,0.00,BUY,Investments,SAMPLE HOLDER
+sample-trade-0006,2026-03-09 21:00:00.000000 (UTC),NZC,Smart NZ Cash ETF,NZX,3,1.20,BUY,nzd,3.60,0.00,BUY,High-growth portfolio,SAMPLE HOLDER
