@@ -154,7 +154,7 @@ export function CsvImportCard({
 
           <p className="muted tiny" style={{ marginTop: 10 }}>
             Treat another category as a contribution:
-            {["deposit", "buy", "transfer", "dividend"].map((category) => (
+            {["deposit", "buy", "sell", "withdrawal", "transfer", "dividend", "interest", "fee"].map((category) => (
               <button
                 key={category}
                 className="small"
