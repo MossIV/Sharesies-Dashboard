@@ -71,7 +71,7 @@ test("normalizeAccounts handles the awkward documented shapes", () => {
 
 test("extractHoldings returns [] rather than throwing on unusable meta", () => {
   assert.deepEqual(extractHoldings(undefined), []);
-  assert.deepEqual(extractHoldings({ holder: "W WONG" }), []);
+  assert.deepEqual(extractHoldings({ holder: "SAMPLE HOLDER" }), []);
   assert.deepEqual(extractHoldings({ portfolio: [] }), []);
   assert.deepEqual(extractHoldings({ portfolio: "nonsense" }), []);
 });

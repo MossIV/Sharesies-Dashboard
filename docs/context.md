@@ -247,7 +247,7 @@ value and can never find the earlier of two valid answers.
 | Symptom | Cause | Fix |
 |---|---|---|
 | Container Station: **"Invalid File Format"** on a `.tar` its own dialog says it supports | Docker Desktop's containerd image store writes an OCI archive (`oci-layout`, `index.json`, `blobs/sha256/…`), and even `buildx --output type=docker` writes `manifest.json` pointing at `blobs/`. Container Station understands only the legacy layout: `manifest.json`, a `repositories` file, and `<id>/layer.tar` per layer. The message blames the format when the file is a valid archive of the wrong shape. | Convert through a throwaway classic-store daemon (`docker:24-dind`): load the OCI archive, save it back out. The result is about three times larger, because legacy layers are stored uncompressed — expected, not a fault. |
-| The compose file's `/share/<share>/…` paths may not match what Container Station displays | Its file browser presented the same folder as `/WongFiles/Ben/…`, with no `/share` prefix, while the daemon resolves host paths under `/share`. | Confirm with Container Station's volume picker instead of typing; swap the prefix if a mount error appears. |
+| The compose file's `/share/<share>/…` paths may not match what Container Station displays | Its file browser presented the same folder with the share name first and no `/share` prefix, while the daemon resolves host paths under `/share`. | Confirm with Container Station's volume picker instead of typing; swap the prefix if a mount error appears. |
 
 A detail worth keeping from that first attempt: the container ran happily in the
 background while its readiness loop hung on `docker info`, so it looked busy rather than

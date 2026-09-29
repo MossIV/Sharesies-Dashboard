@@ -16,9 +16,9 @@
 #
 # The paths below are placeholders. Container Station's own folder picker shows the
 # real /share/... path for a folder, which is the quickest way to get them right.
-# On this NAS the Container Station data directory lives at
-# Y:\Ben\container-station-data, so its host path is of the form
-# /share/<SHARE>/Ben/container-station-data — use the same <SHARE> in ADJUST 1.
+# The Container Station data directory usually sits one level down, at
+# /share/<SHARE>/<container-station-folder>/container-station-data — use that same
+# <SHARE> in ADJUST 1.
 
 services:
   dashboard:
@@ -27,9 +27,9 @@ services:
     restart: unless-stopped
 
     # ADJUST 1 — the folder holding this file and .env, e.g.
-    #   /share/Ben/Ben/sharesies/.env
+    #   /share/<SHARE>/sharesies/.env
     env_file:
-      - /share/SHARE/Ben/sharesies/.env
+      - /share/SHARE/sharesies/.env
 
     # Pinned here rather than left to .env on purpose: `env_file` overrides the
     # image's own values, and .env's local-run DB_PATH would point at a path inside
@@ -44,11 +44,11 @@ services:
 
     volumes:
       # ADJUST 2 — the database folder.
-      - /share/SHARE/Ben/sharesies/data:/data
+      - /share/SHARE/sharesies/data:/data
       # ADJUST 3 — the backups folder. Put this on a different share if you can,
       # and ideally on a different disk or an external one: a backup beside the
       # original is not a backup, it is a copy.
-      - /share/BACKUP/Ben/sharesies-backups:/backups
+      - /share/BACKUP/sharesies-backups:/backups
 
     # Reach it on the LAN at http://<nas-ip>:8081. Leave it on the LAN, or put it
     # behind the NAS's reverse proxy or a VPN: the app has no authentication and

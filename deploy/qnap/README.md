@@ -35,11 +35,12 @@ Container Station manages `container-station-data/` itself — it holds `applica
 `image/`, `lib/` and `tmp/`, and the application definitions it stores there are its
 to rewrite. Keep the database and the backups outside it.
 
-On this NAS, Container Station's data sits under `Y:\Ben\container-station-data`, so
-create the app folders beside it:
+On this NAS, Container Station's data sits under a folder of the form
+`Y:\<container-station-folder>\container-station-data`, so create the app folders beside
+it:
 
 ```
-Y:\Ben\sharesies\
+Y:\sharesies\
 ├─ data\                 the database — the only copy of the history
 ├─ backups\              verified copies
 └─ .env                  tokens and the notification topic
@@ -103,7 +104,7 @@ Copy it to the NAS, then import it in Container Station (**Images → Add → Im
 called *Load image* in some builds) or over SSH:
 
 ```bash
-docker load -i /share/<SHARE>/Ben/sharesies/sharesies-dashboard.tar
+docker load -i /share/<SHARE>/sharesies/sharesies-dashboard.tar
 ```
 
 The image carries the built web UI, so there is nothing else to transfer — just `.env`.
@@ -112,7 +113,7 @@ Check the copy arrived intact before loading it, since a truncated tar fails in 
 confusing way:
 
 ```bash
-sha256sum /share/<SHARE>/Ben/sharesies/sharesies-dashboard.tar
+sha256sum /share/<SHARE>/sharesies/sharesies-dashboard.tar
 ```
 
 The alternative to all of this, if the conversion is tedious: turn off **Settings →
@@ -126,7 +127,7 @@ Copy the repository to the NAS and build there. Slower, and it needs internet ac
 the base image and the npm registries, but it is the only option on an ARM model:
 
 ```bash
-cd /share/<SHARE>/Ben/sharesies-dashboard
+cd /share/<SHARE>/sharesies-dashboard
 docker build -t sharesies-dashboard:latest .
 ```
 
@@ -174,11 +175,11 @@ folder, and set the three paths marked `ADJUST`.
 
 **On those paths.** They are the *host* paths the Docker daemon resolves, which on QNAP
 are `/share/<share>/…`. Container Station's own file browser may show the same folder
-differently — its image importer, for instance, presented a folder as
-`/WongFiles/Ben/sharesies/…` with no `/share` prefix. If the application fails to start
-with a mount error, or starts but cannot find the database, that prefix is the first thing
-to swap. The reliable way to avoid guessing is to add the two volumes through Container
-Station's own volume picker rather than typing the paths, then compare what it writes.
+without that prefix — its image importer presented the app folder as `/…/sharesies/…`
+with the share name first and no `/share`. If the application fails to start with a mount
+error, or starts but cannot find the database, that prefix is the first thing to swap. The
+reliable way to avoid guessing is to add the two volumes through Container Station's own
+volume picker rather than typing the paths, then compare what it writes.
 
 The two that matter most:
 
@@ -196,7 +197,7 @@ and if uid 1000 cannot write the database the container fails at startup with
 `unable to open database file`.
 
 ```bash
-chown -R 1000:1000 /share/<SHARE>/Ben/sharesies/data /share/<BACKUP>/Ben/sharesies-backups
+chown -R 1000:1000 /share/<SHARE>/sharesies/data /share/<BACKUP>/sharesies-backups
 ```
 
 Or, if you would rather not change ownership on the NAS, uncomment `user: "0:0"` in the

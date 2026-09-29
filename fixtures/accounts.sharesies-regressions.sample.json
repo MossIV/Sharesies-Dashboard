@@ -10,7 +10,7 @@
       "connection": { "_id": "conn_sharesies", "name": "Sharesies" },
       "balance": { "current": "9402.10", "currency": "NZD" },
       "refreshed": { "meta": "2026-09-28T02:11:04.000Z" },
-      "meta": { "holder": "W WONG" }
+      "meta": { "holder": "SAMPLE HOLDER" }
     },
     {
       "_id": "acc_sharesies_inactive_0001",

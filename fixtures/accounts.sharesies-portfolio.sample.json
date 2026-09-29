@@ -21,7 +21,7 @@
         "transactions": "2026-09-28T02:11:04.000Z"
       },
       "meta": {
-        "holder": "W WONG",
+        "holder": "SAMPLE HOLDER",
         "portfolio": [
           { "name": "Smartshares US 500 ETF", "symbol": "USF", "units": 120.5, "value": 10250.75 },
           { "name": "Fisher & Paykel Healthcare", "symbol": "FPH", "units": 30, "value": 4821.8 },
@@ -41,7 +41,7 @@
       },
       "balance": { "current": 412.15, "currency": "NZD" },
       "refreshed": { "balance": "2026-09-28T02:11:04.000Z", "meta": "2026-09-28T02:11:04.000Z" },
-      "meta": { "holder": "W WONG" }
+      "meta": { "holder": "SAMPLE HOLDER" }
     },
     {
       "_id": "acc_anz_everyday_0001",
