@@ -39,6 +39,19 @@ export interface ContributionRow {
   /** The provider's id or a content hash; null for a hand-entered row. */
   externalRef: string | null;
   createdAt: string;
+  /**
+   * The account this money belongs to. Null means "not attributed": a row typed
+   * by hand for the goal, or an import whose portfolio could not be matched.
+   */
+  accountId: string | null;
+  /** The currency the row was denominated in, before conversion. */
+  currency: string;
+  /** The amount in `currency`; `amountNzd` is that figure converted. */
+  amountOriginal: number | null;
+  /** NZD per one unit of `currency`, so the conversion can be checked. */
+  fxRate: number | null;
+  /** What the row was: buy, sell, deposit, withdrawal, ... Null if unknown. */
+  category: string | null;
 }
 
 export interface SyncRunRow {
@@ -525,42 +538,100 @@ function toContribution(row: Row): ContributionRow {
     source: s(row["source"]) as ContributionRow["source"],
     externalRef: sn(row["external_ref"]),
     createdAt: s(row["created_at"]),
+    accountId: sn(row["account_id"]),
+    currency: s(row["currency"]) || "NZD",
+    amountOriginal: row["amount_original"] === null || row["amount_original"] === undefined
+      ? null
+      : n(row["amount_original"]),
+    fxRate: row["fx_rate"] === null || row["fx_rate"] === undefined ? null : n(row["fx_rate"]),
+    category: sn(row["category"]),
   };
 }
 
-export function listContributions(
-  db: DatabaseSync,
-  options: { from?: string | undefined; to?: string | undefined } = {},
-): ContributionRow[] {
+/**
+ * Whether a contribution belongs to the goal.
+ *
+ * The rule exists because an import attributes its rows to a *portfolio*, and a
+ * Sharesies report covers every portfolio, while the goal covers one. Without it
+ * the chart compared a value scoped to one account against contributions summed
+ * over all of them.
+ *
+ *   - a row an import attributed to an account outside the goal -> not counted.
+ *     This is the case the rule is for: 986 rows belonging to another portfolio.
+ *   - a row an import could not place (from an import, no account, and accounts
+ *     exist) -> not counted. Guessing which portfolio it belongs to is how the
+ *     wrong total got in, and the log shows it as unattributed rather than hiding it.
+ *   - ...unless no accounts are registered at all, in which case there is no other
+ *     portfolio it could belong to. A CSV-only install must not have its deposits
+ *     silently dropped.
+ *   - a row entered by hand, or detected in your bank feed, -> counted. It was
+ *     entered *for* the goal, and Akahu cannot say which portfolio a transfer landed
+ *     in, so there is nothing to attribute it to and nothing to exclude it for.
+ */
+const GOAL_SCOPE_CLAUSE = `(
+  (c.account_id IS NULL AND c.external_ref IS NULL)
+  OR (c.account_id IS NULL AND c.source = 'bank')
+  OR (c.account_id IS NULL AND c.source = 'csv' AND NOT EXISTS (SELECT 1 FROM accounts))
+  OR EXISTS (SELECT 1 FROM accounts a WHERE a.account_id = c.account_id AND a.in_scope = 1)
+)`;
+
+
+export interface ContributionQuery {
+  from?: string | undefined;
+  to?: string | undefined;
+  /** "goal" (default) counts only what the goal holds; "all" is everything. */
+  scope?: "goal" | "all";
+}
+
+export function listContributions(db: DatabaseSync, options: ContributionQuery = {}): ContributionRow[] {
   const clauses: string[] = [];
   const params: string[] = [];
   if (options.from) {
-    clauses.push("contribution_date >= ?");
+    clauses.push("c.contribution_date >= ?");
     params.push(options.from);
   }
   if (options.to) {
-    clauses.push("contribution_date <= ?");
+    clauses.push("c.contribution_date <= ?");
     params.push(options.to);
   }
+  if ((options.scope ?? "goal") === "goal") clauses.push(GOAL_SCOPE_CLAUSE);
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
   const rows = db.prepare(
-    `SELECT * FROM contributions ${where} ORDER BY contribution_date ASC, id ASC`,
+    `SELECT c.* FROM contributions c ${where} ORDER BY c.contribution_date ASC, c.id ASC`,
   ).all(...params) as Row[];
   return rows.map(toContribution);
 }
 
-export function createContribution(
-  db: DatabaseSync,
-  input: { contributionDate: string; amountNzd: number; note?: string | null; source?: ContributionRow["source"] },
-): ContributionRow {
+export interface ContributionInput {
+  contributionDate: string;
+  amountNzd: number;
+  note?: string | null;
+  source?: ContributionRow["source"];
+  accountId?: string | null;
+  currency?: string | null;
+  amountOriginal?: number | null;
+  fxRate?: number | null;
+  category?: string | null;
+}
+
+export function createContribution(db: DatabaseSync, input: ContributionInput): ContributionRow {
+  const currency = (input.currency ?? "NZD").toUpperCase();
   const result = db.prepare(
-    "INSERT INTO contributions (contribution_date, amount_nzd, note, source, created_at) VALUES (?, ?, ?, ?, ?)",
+    `INSERT INTO contributions (
+       contribution_date, amount_nzd, note, source, created_at,
+       account_id, currency, amount_original, fx_rate, category
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.contributionDate,
     input.amountNzd,
     input.note ?? null,
     input.source ?? "manual",
     new Date().toISOString(),
+    input.accountId ?? null,
+    currency,
+    input.amountOriginal ?? input.amountNzd,
+    input.fxRate ?? 1,
+    input.category ?? null,
   );
   const row = db.prepare("SELECT * FROM contributions WHERE id = ?").get(Number(result.lastInsertRowid)) as Row;
   return toContribution(row);
@@ -570,22 +641,20 @@ export function deleteContribution(db: DatabaseSync, id: number): boolean {
   return Number(db.prepare("DELETE FROM contributions WHERE id = ?").run(id).changes ?? 0) > 0;
 }
 
-export function netContributions(
-  db: DatabaseSync,
-  options: { from?: string | undefined; to?: string | undefined } = {},
-): number {
+export function netContributions(db: DatabaseSync, options: ContributionQuery = {}): number {
   const clauses: string[] = [];
   const params: string[] = [];
   if (options.from) {
-    clauses.push("contribution_date >= ?");
+    clauses.push("c.contribution_date >= ?");
     params.push(options.from);
   }
   if (options.to) {
-    clauses.push("contribution_date <= ?");
+    clauses.push("c.contribution_date <= ?");
     params.push(options.to);
   }
+  if ((options.scope ?? "goal") === "goal") clauses.push(GOAL_SCOPE_CLAUSE);
   const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
-  const row = db.prepare(`SELECT COALESCE(SUM(amount_nzd), 0) AS total FROM contributions ${where}`)
+  const row = db.prepare(`SELECT COALESCE(SUM(c.amount_nzd), 0) AS total FROM contributions c ${where}`)
     .get(...params) as Row | undefined;
   return Math.round(n(row?.["total"]) * 100) / 100;
 }
@@ -809,32 +878,125 @@ export function findContributionByRef(db: DatabaseSync, externalRef: string): Co
  */
 export function importContribution(
   db: DatabaseSync,
-  input: {
-    contributionDate: string;
-    amountNzd: number;
-    note?: string | null;
-    source: ContributionRow["source"];
-    externalRef: string | null;
-  },
+  input: ContributionInput & { externalRef: string | null },
 ): { contribution: ContributionRow | null; skipped: boolean } {
   if (input.externalRef !== null) {
     const existing = findContributionByRef(db, input.externalRef);
     if (existing) return { contribution: existing, skipped: true };
   }
 
+  const currency = (input.currency ?? "NZD").toUpperCase();
   const result = db.prepare(
-    `INSERT INTO contributions (contribution_date, amount_nzd, note, source, created_at, external_ref)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO contributions (
+       contribution_date, amount_nzd, note, source, created_at, external_ref,
+       account_id, currency, amount_original, fx_rate, category
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   ).run(
     input.contributionDate,
     input.amountNzd,
     input.note ?? null,
-    input.source,
+    input.source ?? "csv",
     new Date().toISOString(),
     input.externalRef,
+    input.accountId ?? null,
+    currency,
+    input.amountOriginal ?? input.amountNzd,
+    input.fxRate ?? 1,
+    input.category ?? null,
   );
   const row = db.prepare("SELECT * FROM contributions WHERE id = ?").get(Number(result.lastInsertRowid)) as Row;
   return { contribution: toContribution(row), skipped: false };
+}
+
+// ------------------------------------------------------------------- fx rates
+
+export interface FxRateRow {
+  base: string;
+  quote: string;
+  /** The date asked about — the cache key. */
+  asOfDate: string;
+  rate: number;
+  /** The date the rate is actually published for; differs on weekends. */
+  rateDate: string;
+  source: string;
+  fetchedAt: string;
+}
+
+function toFxRate(row: Row): FxRateRow {
+  return {
+    base: s(row["base"]),
+    quote: s(row["quote"]),
+    asOfDate: s(row["as_of_date"]),
+    rate: n(row["rate"]),
+    rateDate: s(row["rate_date"]),
+    source: s(row["source"]),
+    fetchedAt: s(row["fetched_at"]),
+  };
+}
+
+export function upsertFxRate(
+  db: DatabaseSync,
+  entry: { base: string; quote: string; asOfDate: string; rate: number; rateDate: string; source: string },
+): void {
+  db.prepare(
+    `INSERT INTO fx_rates (base, quote, as_of_date, rate, rate_date, source, fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT (base, quote, as_of_date) DO UPDATE SET
+       rate = excluded.rate, rate_date = excluded.rate_date,
+       source = excluded.source, fetched_at = excluded.fetched_at`,
+  ).run(
+    entry.base.toUpperCase(),
+    entry.quote.toUpperCase(),
+    entry.asOfDate,
+    entry.rate,
+    entry.rateDate,
+    entry.source,
+    new Date().toISOString(),
+  );
+}
+
+export function getFxRate(db: DatabaseSync, base: string, quote: string, asOfDate: string): FxRateRow | null {
+  const row = db.prepare(
+    "SELECT * FROM fx_rates WHERE base = ? AND quote = ? AND as_of_date = ?",
+  ).get(base.toUpperCase(), quote.toUpperCase(), asOfDate) as Row | undefined;
+  return row ? toFxRate(row) : null;
+}
+
+/**
+ * The newest *published* rate at or before `date`.
+ *
+ * Only rows where `as_of_date = rate_date` are published points, so a carry-forward
+ * cannot be mistaken for a rate that existed on the day. This is what lets a trade
+ * on a Sunday use Friday's published rate and say so.
+ */
+export function publishedFxRateOnOrBefore(db: DatabaseSync, base: string, quote: string, date: string): FxRateRow | null {
+  const row = db.prepare(
+    `SELECT * FROM fx_rates
+      WHERE base = ? AND quote = ? AND as_of_date = rate_date AND rate_date <= ?
+      ORDER BY rate_date DESC LIMIT 1`,
+  ).get(base.toUpperCase(), quote.toUpperCase(), date) as Row | undefined;
+  return row ? toFxRate(row) : null;
+}
+
+/** Every cached rate for a pair, oldest first: the published series and its answers. */
+export function listFxRates(
+  db: DatabaseSync,
+  options: { base: string; quote: string; from?: string; to?: string },
+): FxRateRow[] {
+  const clauses = ["base = ?", "quote = ?"];
+  const params: string[] = [options.base.toUpperCase(), options.quote.toUpperCase()];
+  if (options.from) {
+    clauses.push("as_of_date >= ?");
+    params.push(options.from);
+  }
+  if (options.to) {
+    clauses.push("as_of_date <= ?");
+    params.push(options.to);
+  }
+  const rows = db.prepare(
+    `SELECT * FROM fx_rates WHERE ${clauses.join(" AND ")} ORDER BY as_of_date ASC`,
+  ).all(...params) as Row[];
+  return rows.map(toFxRate);
 }
 
 // --------------------------------------------------------------- notifications
