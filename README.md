@@ -214,15 +214,24 @@ the data elsewhere rather than for disaster recovery.
 
 Running locally is the default and nothing needs changing for it.
 
-For the NAS there is a `Dockerfile` and a `docker-compose.yml`; on a QNAP, follow
+For the NAS there is a `Dockerfile` and a compose template; on a QNAP, follow
 [`deploy/qnap/`](deploy/qnap/README.md) instead, which gives the paths to use, how to get
 the image across (a tar by default; a registry is documented as an option), the
 folder-ownership trap, and what the startup log must say.
 
+Compose files are not tracked: a working one carries host-specific paths and volumes.
+The templates are, and you copy the one that applies:
+
+```bash
+cp docker-compose.example.yml docker-compose.yml          # local
+cp deploy/qnap/docker-compose.example.yml docker-compose.yml   # on the NAS
+```
+
 Wherever it runs, the local equivalent is:
 
 ```bash
-cp .env.example .env          # tokens, ntfy topic, schedule
+cp .env.example .env                              # tokens, ntfy topic, schedule
+cp docker-compose.example.yml docker-compose.yml  # a fresh clone has no working file
 docker compose up -d --build
 docker compose logs -f
 ```

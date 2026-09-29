@@ -170,8 +170,10 @@ Container Station pulls on start. Two things to decide:
 
 ## 3. Start it
 
-Container Station → **Applications → Create**, paste `docker-compose.yml` from this
-folder, and set the three paths marked `ADJUST`.
+Container Station → **Applications → Create**, paste `docker-compose.example.yml` from
+this folder, and set the three paths marked `ADJUST`. (On the NAS it is normally saved
+as `docker-compose.yml` — the working name is git-ignored in the repository, which keeps
+a real share name and real host paths out of it.)
 
 **On those paths.** They are the *host* paths the Docker daemon resolves, which on QNAP
 are `/share/<share>/…`. Container Station's own file browser may show the same folder

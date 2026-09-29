@@ -23,3 +23,15 @@ backups/
 # A sanitized fixture meant for committing is named fixtures/akahu-accounts.sanitized.json.
 fixtures/akahu-accounts.spike-*.json
 fixtures/akahu-accounts.real.json
+
+# Compose files are configuration, not source. A working one carries this machine's
+# host paths, ports and volume mounts — on the NAS that includes the share name and
+# the folders the history lives in — and a copied one is the easiest place for a
+# real path to end up in the repository. The templates are committed instead:
+#   docker-compose.example.yml            local
+#   deploy/qnap/docker-compose.example.yml   QNAP Container Station
+# Copy whichever applies to `docker-compose.yml` and edit it there.
+docker-compose.yml
+docker-compose.override.yml
+docker-compose.*.yml
+!docker-compose.example.yml

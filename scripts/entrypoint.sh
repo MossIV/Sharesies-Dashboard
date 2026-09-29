@@ -10,7 +10,7 @@
 #
 # The scheduler finishes what it is doing before exiting: its own handler sets a
 # flag and the current pass (a collection, a VACUUM INTO) completes first. The
-# grace period in docker-compose.yml is what gives it room to.
+# grace period in the compose file is what gives it room to.
 set -eu
 
 echo "Sharesies dashboard"

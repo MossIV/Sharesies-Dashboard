@@ -120,7 +120,7 @@ back on code that had only ever been run by hand.
 | A failed collection is reported, not fatal | Akahu being briefly unavailable should cost one day, not the scheduler. The backup still runs, because a failed fetch is exactly when yesterday's data matters most. |
 | One container, two processes | Two containers writing the same SQLite file across a bind mount is a locking risk. The API runs in the foreground so the container's liveness means something; `tini` forwards signals so a stop request reaches both. |
 | The image is two stages | The web build needs Vite; the runtime needs three packages. The runtime stage installs only those. |
-| The volume paths are pinned in `docker-compose.yml`, not left to `.env` | `env_file` overrides the image's `ENV`, so `DB_PATH=data/sharesies.db` — which is right for a local run — pointed the container at `/app/data/sharesies.db`, inside the container and outside the volume. `environment` wins over `env_file`, so the paths hold whatever `.env` says. |
+| The volume paths are pinned in the compose file, not left to `.env` | `env_file` overrides the image's `ENV`, so `DB_PATH=data/sharesies.db` — which is right for a local run — pointed the container at `/app/data/sharesies.db`, inside the container and outside the volume. `environment` wins over `env_file`, so the paths hold whatever `.env` says. |
 
 ### What only the container could have found
 

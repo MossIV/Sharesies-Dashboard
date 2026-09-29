@@ -1,6 +1,6 @@
 # Container Station (QNAP) deployment.
 #
-# This is the NAS version of the root docker-compose.yml. The differences are all
+# This is the NAS version of the root docker-compose.example.yml. The differences are all
 # about where things live: Container Station takes host paths as /share/... and it
 # manages the directory this file would otherwise sit in, so the database is kept
 # well away from it.
