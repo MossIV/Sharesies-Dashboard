@@ -26,6 +26,16 @@ services:
     container_name: sharesies-dashboard
     restart: unless-stopped
 
+    # Whether a recreate fetches the image again. Uncomment this when the image comes
+    # from a registry (option C or D in the README). Without it Compose is satisfied by
+    # the local copy of the tag, so recreating the application keeps running the old
+    # image and an update looks like it did nothing. (`restart` never pulls, whatever
+    # this says.)
+    #
+    # Leave it commented out for the tar route (option A): that image is in no
+    # registry, so a pull fails and the application will not start.
+    # pull_policy: always
+
     # ADJUST 1 — the folder holding this file and .env, e.g.
     #   /share/<SHARE>/sharesies/.env
     env_file:

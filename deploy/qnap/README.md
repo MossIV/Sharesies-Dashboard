@@ -259,6 +259,39 @@ tries to log in.
 
 ---
 
+## 2a. Doing all of that in Container Station
+
+Everything in section 2 can be done in the web interface rather than over SSH. The steps,
+and the one place where the GUI quietly does the wrong thing:
+
+| What | Where |
+|---|---|
+| Registry credentials | **Preferences → Registry** — add `docker.io` with your Docker Hub name and a **read-only** access token. Required: the repository is private, and an anonymous pull is refused (verified: HTTP 401). |
+| Pull the image | **Images → Pull**, then the full name, e.g. `docker.io/<user>/sharesies-dashboard:<sha>`. The sha comes from the run summary in the Actions tab. |
+| Change which image runs | **Applications → (the app) → edit the YAML → apply**. That recreates the container. |
+| See the log | The application, then **Logs**. This is where the `database:` and `backups:` lines are checked. |
+| Back up now | Its own job at 07:00 writes to `/backups` unattended. For one before an update, use a container console if your Container Station has one (`node scripts/backup.ts --dir /backups`), or one SSH command. |
+
+**The trap: `Restart` is not an update.** A restart reuses the image the container was
+created from. Only a *recreate* can switch images, and even then Compose will not fetch the
+tag again unless the service says so:
+
+```yaml
+    pull_policy: always      # uncomment when using a registry
+```
+
+That line is commented out in the template, with the reason: it must stay off for a
+tar-imported image, which is not in any registry, or the pull fails and the application will
+not start. For a registry route, uncommenting it is what makes "edit the tag, apply" behave
+like an update, and it makes `latest` work the way people expect it to.
+
+Two honest caveats. Container Station labels vary between versions — if a screen here does
+not match yours, say what you see and this section can be corrected. And nothing in the GUI
+replaces reading the first lines of the log afterwards: a container that starts is not
+evidence that it started on the volume.
+
+---
+
 ## 3. Start it
 
 Container Station → **Applications → Create**, paste `docker-compose.example.yml` from

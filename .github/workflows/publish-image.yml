@@ -35,6 +35,14 @@ name: Publish image
 on:
   push:
     branches: [main]
+    # A documentation or compose change cannot alter the image: the Dockerfile copies
+    # src, scripts, web/dist and the package files, and nothing else. Rebuilding anyway
+    # would move `latest` for no reason, churning the very tag people are told to pin.
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+      - "deploy/**"
+      - ".github/**"
   workflow_dispatch:
 
 permissions:
