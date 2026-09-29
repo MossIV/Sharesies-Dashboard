@@ -156,6 +156,42 @@ Three smaller things this work turned up, each of which had a silent failure mod
   `no such table: snapshots`. The integrity check is the authoritative signal; the row
   count is a convenience, so it now reports `-1` rather than failing a readable copy.
 
+## Learned from a real transaction report
+
+The importer had only ever been run against fixtures written by hand from the
+documented shape. Running it against an actual Sharesies export — 1,017 rows,
+2020-08-26 to 2026-09-28 — found five things, four of which were invisible in the
+preview and one which was visible and wrong.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| **The contributions chart was unreadable once the report was imported** | The report covers every portfolio, the goal tracks one. Selecting `buy` imported all 997 rows across both portfolios — 8,657.60 of "deposits" — against an in-scope value of 214.33, so growth was minus 8,443 and a stacked area with a negative layer collapses its axis | Rows carry the account their `Portfolio` column names (migration 004); a row outside the goal is logged and excluded from the goal's total. Verified on the real file: 213.91 contributed against a 214.33 value |
+| **280 rows of the 1,017 were USD or AUD, added to `amount_nzd` as if they were NZD** | There was no `currency` column role, so the file's own currency column was reported as unrecognised and ignored — a silent ~1.76x overstatement on every USD row | `currency` is detected, each row is converted at the rate for its own trade date, and `currency`/`amount_original`/`fx_rate` are stored on the row |
+| **A 997-row import produced notes reading "BUY · 24112"** | The loose header pass settled on *Instrument code*, because the synonym list contained `instrument` before anything that matched *Instrument name* | `instrumentname` is listed first; the code is the symbol fallback |
+| **Sells could not be imported at all** | `contributionAmount` already signed a sell negative and the API already accepted the category, but the UI's toggle row offered only deposit/buy/transfer/dividend | The toggles offer buy, sell, withdrawal, interest and fee as well |
+| **Identical rows were at risk of being dropped as duplicates** | The idempotency key was a content hash of date, type, description and amount — two genuinely identical trades hash the same, and one would be skipped on a re-import | The report's own Trade ID is the key when the file has one; the hash is the fallback. A test imports two identical rows and asserts both survive |
+
+The chart's arithmetic was also rewritten: `value = contributions + growth` only
+means anything when both sides describe the same accounts, so it now runs in
+`src/domain/contributions.ts` with tests, and the component stacks the two only
+when growth is non-negative — otherwise the same series is drawn as lines with the
+shortfall stated. Growth below zero is a real state (a market fall), not a
+rendering bug, and a stacked area simply cannot show it.
+
+Two smaller things the report settled:
+
+* **The report's `Portfolio` names do not match the account names.** The file says
+  `Investments` and `High-growth portfolio`; Akahu registers `Ben's Investments` and
+  `Ben's High-growth portfolio`. Matching is therefore on the normalised name in
+  either direction, and it refuses to guess: a name that could mean two accounts, or
+  none, resolves to nothing and is reported rather than attributed.
+* **The report is not a deposit ledger.** It contained no top ups. Buys are the
+  money-in proxy that balances for a portfolio funded by them — the tracked
+  account's 31 buys came to 213.94 against a value of 214.33, a 0.39 gap — but that
+  identity holds for *that* account because that account's money arrived as those
+  trades. A file that names no portfolio, with a goal that tracks exactly one
+  account, has its rows follow that account and says so in the preview.
+
 ## Known gaps
 
 * **One snapshot of history so far.** Pace, and the 7/30-day change figures, need a few

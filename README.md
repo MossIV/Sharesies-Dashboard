@@ -49,7 +49,7 @@ real portfolio figures.
 
 | Command | Purpose |
 |---|---|
-| `npm test` | 229 tests (parsing, domain, collector, API, import, notifications, export, scheduling) on the built-in node:test runner |
+| `npm test` | 275 tests (parsing, domain, collector, API, import, currency conversion, notifications, export, scheduling) on the built-in node:test runner |
 | `npm run typecheck` | `tsc --noEmit`; the only use for the TypeScript compiler here |
 | `npm run spike` | Call Akahu once, report what came back, save a redacted fixture |
 | `npm run collect` | Run one collection pass, the daily job |
@@ -170,12 +170,35 @@ Download an official transaction report from Sharesies and import it:
 ```bash
 npm run import:csv -- --file "C:/Users/you/Downloads/transaction-report.csv"           # preview
 npm run import:csv -- --file "C:/Users/you/Downloads/transaction-report.csv" --apply    # write
+npm run import:csv -- --file report.csv --apply --categories buy,sell                   # what the report holds
 ```
 
 The preview lists what would be logged and what would be skipped, and the importer
-is idempotent: each row is keyed by a content hash, so importing the same report
-twice adds nothing. Contributions are logged as `source = 'csv'` and stay separate
-from the portfolio snapshots, because Akahu cannot see trades.
+is idempotent: each row is keyed by the report's own Trade ID where it has one, so
+importing the same file twice adds nothing.
+
+Four things about this report are worth knowing, because each is a way the import
+was wrong before it was checked against a real one:
+
+* **It is a buy/sell log, not a deposits ledger.** A real export held 997 buys and
+  20 sells and no top ups at all. Categories are selectable and nothing is imported
+  unless asked for; `sell` and `withdrawal` rows are negative contributions, because
+  the log's total is net money in.
+* **It covers every portfolio, while a goal usually tracks one.** Rows are
+  attributed to the account their `Portfolio` column names, matched against the
+  accounts Akahu has registered. A row for an account outside the goal is logged
+  (so the history is complete) and left out of the goal's contributions. Without
+  this, one portfolio's value was compared against every portfolio's deposits.
+* **It can mix currencies.** One export held NZD, USD and AUD rows in a single
+  file. Each row is converted at the rate published for its own trade date and the
+  rate is stored on the row, so the conversion can be checked rather than trusted.
+  A row whose rate cannot be found is reported and left out — never counted at par.
+  See `FX_PROVIDER` / `FX_ENABLED` in `.env.example`; rates are cached, so a
+  re-import needs no network access.
+* **A row it cannot attribute is held out**, not guessed at: an unattributed import
+  row does not move the goal. The exception is a file that names no portfolio at
+  all when the goal tracks exactly one account — then its rows follow that account,
+  and the preview says so.
 
 ## Bank-transfer detection (Phase 4)
 

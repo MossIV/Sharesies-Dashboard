@@ -100,10 +100,15 @@ against a connection-name pattern and an account-type list, and the rule is show
 UI so it is not magic.
 
 **Contributions.** A manual log, plus two ways to fill it: the official Sharesies
-transaction report (idempotent, keyed by a content hash, with a preview before anything
-is written) and bank-transfer detection, which proposes candidates and never writes
-without an explicit confirmation. Akahu cannot see trades, so this log is what separates
-deposits from growth.
+transaction report (idempotent, keyed by the report's own Trade ID, with a preview
+before anything is written) and bank-transfer detection, which proposes candidates
+and never writes without an explicit confirmation. Akahu cannot see trades, so this log
+is what separates deposits from growth. Two things the log has to get right, both
+learned from a real export: a report covers *every* portfolio while a goal tracks one,
+so each row is attributed to the account its Portfolio column names and a row outside
+the goal is logged but not counted; and a report can hold several currencies in one
+file, so each row is converted at the rate published for its own trade date, with the
+rate stored on the row.
 
 **Projections.** Month-by-month arithmetic at low/base/high assumptions, labelled
 throughout as assumptions rather than predictions, with a required-contribution figure.
@@ -212,6 +217,44 @@ snapshots, not just the headline. A test file now builds the exact shape of the 
 data — a small account inside the goal, a large one outside it — so the next such query
 fails loudly.
 
+### Found by importing a real transaction report
+
+The importer had been written against hand-made fixtures of the documented shape.
+Running it against an actual 1,017-row Sharesies export was the first time anything
+had read a file Sharesies wrote.
+
+The one that was visible: the contributions-versus-growth chart became unreadable.
+The report covers every portfolio — `Investments` and `High-growth portfolio` — while
+the goal tracks one. Importing the buys pulled all 997 rows into a single global
+"contributions" total, 8,657.60 of them against a tracked value of 214.33, so growth
+came out at minus 8,443 and the stacked area collapsed. Underneath it were three
+things no preview could have shown:
+
+* **280 of those rows were USD or AUD**, and there was no currency column role, so
+  they were added to an NZD total at par — a silent 1.76x overstatement on each.
+  Currency is now detected per row and converted at the rate published for that row's
+  own trade date, with the rate kept on the row.
+* **The notes named fund codes rather than funds.** The loose header pass settled on
+  *Instrument code*, because the synonym list matched `instrument` before anything
+  matched *Instrument name*: a 997-row import produced "BUY · 24112".
+* **The idempotency key could drop a real trade.** It was a content hash of date,
+  type, description and amount, so two genuinely identical trades — a same-day buy and
+  sell of the same small amount in the same fund, which the file does contain — hashed
+  the same and one would have been skipped as a duplicate on a re-import. The report's
+  own Trade ID is the key now.
+
+And the one that was simply missing: `sell` was parsed and signed correctly, and the
+API already accepted the category, but the buttons offered only deposit, buy, transfer
+and dividend — so the 20 sells in the file could not be imported at all.
+
+The fix is attribution: rows carry the account their Portfolio column names, matched
+against the accounts Akahu registers (the names do not match exactly — the file says
+`Investments`, the account is called `Ben's Investments`), and a row outside the goal
+is logged while staying out of the goal's total. On the real file the chart now reads
+213.91 contributed against a 214.33 value, and 986 rows sit outside the goal where they
+belong. The matching refuses to guess: a portfolio that could mean two accounts, or
+none, resolves to nothing and is reported.
+
 ### Found by the container
 
 | Symptom | Cause | Fix |
@@ -304,6 +347,10 @@ effect of a cleanup — and it was left alone.
   not a fixture. A test skips when it is absent, and a second test asserts the redaction
   itself.
 * **Real collections** against live data, including deliberately after each fix.
+* **A real Sharesies transaction report**, imported through the CLI and through the API
+  against a copy of the live database: 1,017 rows, 997 buys and 20 sells, 280 rows in a
+  foreign currency, attributed across two portfolios. That is where the attribution and
+  conversion rules were checked, rather than on fixtures written by hand.
 * **The container, end to end**: healthy, serving from the mounted volume, stopping in a
   second with the full shutdown sequence in the log.
 * **The NAS deployment, from another machine on the LAN**: the API answering, the UI
@@ -361,6 +408,11 @@ Known gaps, all deliberate or pending:
   bad collection, not against losing the NAS.
 * Milestone reached-dates are measured on portfolio value; a goal set to a
   contributions basis would still stamp from value. Noted rather than guessed at.
+* **Currency conversion depends on an outside service.** The ECB's reference rates,
+  via the free keyless frankfurter.dev API, are fetched once per currency pair per
+  import and cached in the database, so a re-import works offline. A first import of a
+  foreign-currency report does need the network, and a rate that cannot be found leaves
+  the row out rather than guessing.
 * The names in older commits remain in the git history (see section 6).
 
 ---
