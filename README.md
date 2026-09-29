@@ -214,7 +214,12 @@ the data elsewhere rather than for disaster recovery.
 
 Running locally is the default and nothing needs changing for it.
 
-For the NAS there is a `Dockerfile` and a `docker-compose.yml`:
+For the NAS there is a `Dockerfile` and a `docker-compose.yml`; on a QNAP, follow
+[`deploy/qnap/`](deploy/qnap/README.md) instead, which gives the paths to use, how to get
+the image across (a tar by default; a registry is documented as an option), the
+folder-ownership trap, and what the startup log must say.
+
+Wherever it runs, the local equivalent is:
 
 ```bash
 cp .env.example .env          # tokens, ntfy topic, schedule

@@ -3,6 +3,12 @@
 The same image as everywhere else. Only three things differ on a NAS: where the
 data lives, how the image gets there, and who owns the folders.
 
+**What was done for the first deployment:** the image was built on the Windows machine,
+exported to a tar, checksum-verified, and copied to the NAS for Container Station to
+import. Transferring a tar is the recommended route here — it needs no registry account
+and nothing is published. Option C below keeps the registry workflow on record for if
+you ever rebuild often enough to want it.
+
 ---
 
 ## 0. Check the NAS architecture first
@@ -59,17 +65,29 @@ Copy `.env` across as well — it is git-ignored, so it will not arrive with the
 ```bash
 # on the Windows machine, in the repo
 docker build -t sharesies-dashboard:latest .
-docker save sharesies-dashboard:latest -o sharesies-dashboard.tar
+# --output type=docker writes the format older Docker builds expect. Plain
+# `docker save` on a containerd-backed Docker Desktop emits an OCI layout
+# (blobs/sha256/...) which some Container Station versions cannot import.
+docker buildx build --platform linux/amd64 \
+  --output type=docker,dest=sharesies-dashboard.tar \
+  -t sharesies-dashboard:latest .
 ```
 
-Copy `sharesies-dashboard.tar` to the NAS (the `Y:` share is reachable from here), then
-either import it in Container Station (**Images → Add → Import image**) or over SSH:
+Copy `sharesies-dashboard.tar` to the NAS, then either import it in Container Station
+(**Images → Add → Import image**, called *Load image* in some builds) or over SSH:
 
 ```bash
-docker load -i /share/<SHARE>/Ben/sharesies-dashboard.tar
+docker load -i /share/<SHARE>/Ben/sharesies/sharesies-dashboard.tar
 ```
 
-The image carries the built web UI, so there is nothing else to transfer.
+The image carries the built web UI, so there is nothing else to transfer — just `.env`.
+
+Check the copy arrived intact before loading it, since a truncated tar fails in a
+confusing way:
+
+```bash
+sha256sum /share/<SHARE>/Ben/sharesies/sharesies-dashboard.tar
+```
 
 ### Option B — build on the NAS
 
@@ -80,6 +98,41 @@ the base image and the npm registries, but it is the only option on an ARM model
 cd /share/<SHARE>/Ben/sharesies-dashboard
 docker build -t sharesies-dashboard:latest .
 ```
+
+### Option C — publish to a registry and pull (not used yet)
+
+Kept here because it is the better workflow *if* you ever rebuild often: updating becomes
+"push, then recreate the application" instead of copying a 64 MB file by hand. It was not
+used for the first deployment because it adds a registry account and stored credentials
+for no gain on a personal app that changes occasionally.
+
+```bash
+# on the Windows machine, in the repo
+docker login                                  # do this yourself; tokens are not shared
+docker tag sharesies-dashboard:latest <user>/sharesies-dashboard:0.1.0
+docker tag sharesies-dashboard:latest <user>/sharesies-dashboard:latest
+docker push <user>/sharesies-dashboard:0.1.0
+docker push <user>/sharesies-dashboard:latest
+```
+
+Then the `image:` line in the compose file has to name the registry — a bare
+`sharesies-dashboard:latest` is satisfied by an imported tar, not by a pull:
+
+```yaml
+image: docker.io/<user>/sharesies-dashboard:latest
+```
+
+Container Station pulls on start. Two things to decide:
+
+* **Private or public.** The image holds no secrets — no `.env`, no database, no raw
+  captures, and the tokens are passed in at run time — so a public repository does not
+  leak your data. It does make the repository and its history public, which is the only
+  real cost. A private repository (the free tier allows one) needs the registry
+  credentials added under Container Station → **Preferences → Registry**.
+* **Tagging.** Pushing both a version tag and `latest` lets you pin the compose file to
+  the version and roll back by editing one line, instead of pulling whatever `latest`
+  happens to be. Whatever you pin to, a pull only takes effect when the application is
+  recreated.
 
 ---
 

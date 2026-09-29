@@ -273,12 +273,26 @@ Built and running: collection, storage, the goal and milestone logic, projection
 contributions and both import paths, notifications on a phone, export and backup, the
 unattended daily job, and the container. The design in the plan is implemented.
 
+It runs from a container on a QNAP NAS (Container Station). The image is built on the
+Windows machine, exported to a tar, checksum-verified after the copy, and imported; the
+database and its backups are bind-mounted to folders on a NAS share, beside Container
+Station's own directory rather than inside it. The existing database was copied across
+rather than letting the NAS start empty, because the goal, the milestones and the account
+scope live only in that file — an empty NAS would have meant recreating all of it by hand.
+
+Publishing to a registry and pulling is documented in `deploy/qnap/README.md` as the
+alternative, and deliberately not used: it would add a registry account and credentials
+stored on the NAS in exchange for an easier update path that a personal app does not
+need. The tar route keeps the image private and needs nothing but the file.
+
 Known gaps, all deliberate or pending:
 
 * The scheduler does not backfill missed days — writing today's value into past dates
   would invent the history the database exists to keep.
 * Nothing about the app is authenticated, by design for a private single-user tool.
-* The NAS deployment itself is untested from here.
+* The NAS deployment is verified on Docker Desktop for Windows, not yet on the NAS
+  itself: the bind mounts and filesystem locking over a NAS share are the parts most
+  likely to behave differently, and the folder ownership is the first thing to check.
 * Milestone reached-dates are measured on portfolio value; a goal set to a
   contributions basis would still stamp from value. Noted rather than guessed at.
 
