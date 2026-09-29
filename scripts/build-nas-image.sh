@@ -207,6 +207,9 @@ if [[ "$NEEDS_CONVERT" == "yes" ]]; then
 
   # docker cp rather than a bind mount: -v "C:/x:/work" is split on the colon and
   # read as three fields, which is a silent source of "invalid volume" on Windows.
+  # The price is that nothing creates /work any more -- the mount used to -- and
+  # docker cp will not create a destination directory, only the file inside it.
+  docker exec "$DIND_NAME" mkdir -p /work
   docker cp "$RAW_NATIVE" "${DIND_NAME}:/work/in.tar"
   docker exec "$DIND_NAME" docker load -i /work/in.tar
   docker exec "$DIND_NAME" docker save -o /work/out.tar "$TAG" "$LATEST"
