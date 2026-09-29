@@ -2,9 +2,12 @@
 
 A running record of what this project is, what was decided, what was built, and what
 went wrong along the way. Written to be readable on its own, and deliberately free of
-personal figures: no balances, no account names, no account identifiers, no tokens and
-no notification topic. Where a number mattered to a decision it is described rather
-than quoted.
+personal detail: no names, no balances, no account names, no account identifiers, no
+tokens, no notification topic, and no hostnames or share names. Where a number mattered
+to a decision it is described rather than quoted.
+
+It is also kept current: the sections below describe the state of the project at the
+time of the last commit, not only how it began.
 
 The other documents are:
 
@@ -44,7 +47,7 @@ Answered before the first real collection; the reasoning is in the plan's sectio
 | Goal scope | Sharesies accounts only, and only one of the two the connection exposes. The other is registered and snapshotted daily but excluded from the goal. |
 | Target | A single amount on that one portfolio, with no target date. Standard 25/50/75/100% milestones. |
 | Progress basis | Portfolio value (not net contributions). |
-| Hosting | A container on a NAS, tested locally first. |
+| Hosting | A container on a NAS (QNAP Container Station), tested locally first — and now running there. |
 | Stack | TypeScript, no build step — Node runs it directly and `tsc` is only used for `--noEmit`. |
 | Notifications | Phone push, via ntfy. |
 
@@ -145,9 +148,21 @@ falls back to the manual source rather than failing. Node 24.2 or newer is requi
 For the container:
 
 ```bash
+cp docker-compose.example.yml docker-compose.yml   # the working file is git-ignored
 docker compose up -d --build
 docker compose logs -f
 ```
+
+Compose files are configuration rather than source — a working one carries this machine's
+paths, ports and volumes — so only the templates are tracked:
+
+| Template | For |
+|---|---|
+| `docker-compose.example.yml` | local |
+| `deploy/qnap/docker-compose.example.yml` | QNAP Container Station, with the full walkthrough in `deploy/qnap/README.md` |
+
+A fresh clone has no working compose file and `docker compose up` fails with "no
+configuration file provided", which reads like a missing file rather than a missing step.
 
 ---
 
@@ -253,6 +268,27 @@ A detail worth keeping from that first attempt: the container ran happily in the
 background while its readiness loop hung on `docker info`, so it looked busy rather than
 stuck. Checking the process list inside the container showed the truth in seconds.
 
+### Found by reading the log the working container produced
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Every start opened with `.env not found. Continuing without it.` twice | `--env-file-if-exists` was passed unconditionally, and a container has no `.env` inside it — compose's `env_file` injects the variables instead. The flag's own wording made a correct setup read like a warning about missing credentials, and the only way to be sure was to check `dataMode` on the API. | Pass the flag only when the file exists, and say what is actually true: `settings: from the environment (no .env file inside the container)`. |
+
+### Found by looking for personal data
+
+A sweep of the whole tracked tree for names, hostnames, paths and identifiers, rather
+than fixing only the ones I happened to remember writing.
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| An account holder's name, a bank reference and two transaction narratives in committed fixtures | The fixtures were written early from real response shapes and the personal values rode along. They are sample files, so a placeholder does identical work — but they had been in the repository since the beginning. | `SAMPLE HOLDER` and "Direct credit from Sample S"; the one test that passed the name as a literal now passes the placeholder. |
+| A personal folder name in every path in the NAS docs and the compose template | The instructions were written against the real deployment. | `<SHARE>` / `<app-folder>` placeholders: only the structure mattered, never the name. |
+| A working compose file sitting in the repository | Compose files are configuration. This one carries host paths, and on the NAS the share name and the folder the history lives in — one `git add` from being committed, and the file most likely to be pasted into a chat. | The working file is git-ignored; the templates are committed. |
+
+The names remain in the git history from earlier commits. Rewriting history changes every
+hash and is destructive, so it is a decision to take deliberately rather than as a side
+effect of a cleanup — and it was left alone.
+
 ---
 
 ## 7. How it is verified
@@ -270,11 +306,16 @@ stuck. Checking the process list inside the container showed the truth in second
 * **Real collections** against live data, including deliberately after each fix.
 * **The container, end to end**: healthy, serving from the mounted volume, stopping in a
   second with the full shutdown sequence in the log.
+* **The NAS deployment, from another machine on the LAN**: the API answering, the UI
+  serving, `dataMode` reporting `akahu` (which proves the tokens arrived through compose's
+  `env_file` rather than falling back to the manual source), both accounts present with
+  the right one in scope, and the notification channel configured with no problems. The
+  log line that matters — `database: /data/sharesies.db` — was checked by eye before
+  anything else, because the alternative is a database inside the container.
 
-Two limits worth stating plainly: the container is verified on Docker Desktop for
-Windows, not on a NAS's own Docker, where the bind mounts and filesystem locking are the
-things most likely to differ; and a few figures (pace, 7/30-day change) stay honestly
-blank until enough days have accumulated.
+One limit worth stating plainly: a few figures (pace, the 7/30-day change) stay honestly
+blank until enough days have accumulated. Everything else has been exercised against live
+data or in a container.
 
 ---
 
@@ -284,12 +325,21 @@ Built and running: collection, storage, the goal and milestone logic, projection
 contributions and both import paths, notifications on a phone, export and backup, the
 unattended daily job, and the container. The design in the plan is implemented.
 
-It runs from a container on a QNAP NAS (Container Station). The image is built on the
-Windows machine, exported to a tar, checksum-verified after the copy, and imported; the
-database and its backups are bind-mounted to folders on a NAS share, beside Container
-Station's own directory rather than inside it. The existing database was copied across
-rather than letting the NAS start empty, because the goal, the milestones and the account
-scope live only in that file — an empty NAS would have meant recreating all of it by hand.
+It runs from a container on a QNAP NAS (Container Station), and it is live: the image is
+built on the Windows machine, exported to a tar in the legacy `docker save` layout,
+checksum-verified after the copy, and imported; the database and its backups are
+bind-mounted to folders on a NAS share, beside Container Station's own directory rather
+than inside it. The existing database was copied across rather than letting the NAS start
+empty, because the goal, the milestones and the account scope live only in that file — an
+empty NAS would have meant recreating all of it by hand.
+
+Two things that turned out not to be problems, and are worth knowing anyway: the folders
+were writable by the container's uid, so the ownership fix was not needed, and the port
+prefix question resolved in favour of the `/share/...` form the compose file already used.
+Both were the likeliest failures going in.
+
+The container runs both processes: the API and the daily job, which collects and backs up
+at 07:00 New Zealand time. Nothing else is scheduled on the NAS.
 
 Publishing to a registry and pulling is documented in `deploy/qnap/README.md` as the
 alternative, and deliberately not used: it would add a registry account and credentials
@@ -298,14 +348,20 @@ need. The tar route keeps the image private and needs nothing but the file.
 
 Known gaps, all deliberate or pending:
 
+* **The first unattended run had not happened yet** at the time of writing. The scheduler
+  was running and reporting its next run correctly, and the collection path had been
+  exercised many times by hand, but "it ran by itself overnight, every night" is a claim
+  that needs nights.
 * The scheduler does not backfill missed days — writing today's value into past dates
   would invent the history the database exists to keep.
-* Nothing about the app is authenticated, by design for a private single-user tool.
-* The NAS deployment is verified on Docker Desktop for Windows, not yet on the NAS
-  itself: the bind mounts and filesystem locking over a NAS share are the parts most
-  likely to behave differently, and the folder ownership is the first thing to check.
+* Nothing about the app is authenticated, by design for a private single-user tool. It is
+  published on the LAN only.
+* **The NAS's own backup job is not configured.** The container backs the database up
+  daily, but those copies sit on the same device as the original: they protect against a
+  bad collection, not against losing the NAS.
 * Milestone reached-dates are measured on portfolio value; a goal set to a
   contributions basis would still stamp from value. Noted rather than guessed at.
+* The names in older commits remain in the git history (see section 6).
 
 ---
 
@@ -320,4 +376,17 @@ Worth recording because they were choices, not defaults:
 * `.env` — tokens and the notification topic — is git-ignored from the first commit. The
   notification topic is treated as a secret: anyone who knows it can read the alerts.
 * The container image excludes all of the above; the tokens are passed in at run time.
-* This document quotes no balances, no account names and no identifiers.
+* Fixtures carry placeholders, not the values that came back from the API. They are test
+  data, so `SAMPLE HOLDER` does exactly the same job as a real name.
+* Compose files are configuration, not source: the working file is git-ignored and the
+  templates are committed. The deployed one on the NAS keeps its real paths, because it
+  has to resolve — and it is not in the repository.
+* No hostnames, share names or user directories appear in the tracked tree. The paths in
+  the deployment docs are `<SHARE>` / `<app-folder>` placeholders.
+* This document quotes no balances, no account names, no identifiers, no names, and no
+  notification topic.
+
+One honest caveat: the names were in the fixtures and docs from early on, so they remain
+in the git history of older commits even though the current tree is clean. Removing them
+there means rewriting history, which changes every hash — worth doing deliberately before
+publishing the repository, and not worth doing as a side effect of a cleanup.
