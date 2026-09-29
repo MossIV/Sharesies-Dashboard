@@ -1,0 +1,90 @@
+# Container Station (QNAP) deployment.
+#
+# This is the NAS version of the root docker-compose.yml. The differences are all
+# about where things live: Container Station takes host paths as /share/... and it
+# manages the directory this file would otherwise sit in, so the database is kept
+# well away from it.
+#
+# HOW TO USE
+#   1. Create the folders on the NAS (File Station or SSH):
+#        <APP_DIR>/data      the database — the only copy of the history
+#        <BACKUP_DIR>        the verified copies
+#   2. Copy .env into <APP_DIR> (tokens and the notification topic).
+#   3. Load the image (see README, "Putting it on the NAS").
+#   4. Container Station -> Applications -> Create, paste this file, and adjust the
+#      three paths marked ADJUST.
+#
+# The paths below are placeholders. Container Station's own folder picker shows the
+# real /share/... path for a folder, which is the quickest way to get them right.
+# On this NAS the Container Station data directory lives at
+# Y:\Ben\container-station-data, so its host path is of the form
+# /share/<SHARE>/Ben/container-station-data — use the same <SHARE> in ADJUST 1.
+
+services:
+  dashboard:
+    image: sharesies-dashboard:latest
+    container_name: sharesies-dashboard
+    restart: unless-stopped
+
+    # ADJUST 1 — the folder holding this file and .env, e.g.
+    #   /share/Ben/Ben/sharesies/.env
+    env_file:
+      - /share/SHARE/Ben/sharesies/.env
+
+    # Pinned here rather than left to .env on purpose: `env_file` overrides the
+    # image's own values, and .env's local-run DB_PATH would point at a path inside
+    # the container — outside the volume — so the history would die with the
+    # container. `environment` wins over `env_file`.
+    environment:
+      DB_PATH: /data/sharesies.db
+      BACKUP_DIR: /backups
+      API_HOST: 0.0.0.0
+      API_PORT: 8787
+      TZ: Pacific/Auckland
+
+    volumes:
+      # ADJUST 2 — the database folder.
+      - /share/SHARE/Ben/sharesies/data:/data
+      # ADJUST 3 — the backups folder. Put this on a different share if you can,
+      # and ideally on a different disk or an external one: a backup beside the
+      # original is not a backup, it is a copy.
+      - /share/BACKUP/Ben/sharesies-backups:/backups
+
+    # Reach it on the LAN at http://<nas-ip>:8081. Leave it on the LAN, or put it
+    # behind the NAS's reverse proxy or a VPN: the app has no authentication and
+    # holds your tokens and balances.
+    ports:
+      - "8081:8787"
+
+    # The scheduler finishes an in-flight collection or backup before stopping.
+    stop_grace_period: 30s
+
+    # A note on users: the image runs as `node` (uid 1000). QNAP shares are usually
+    # owned by admin (uid 0), and if uid 1000 cannot write to ADJUST 2 the app fails
+    # at startup with "unable to open database file". Either:
+    #   SSH:  chown -R 1000:1000 <APP_DIR>/data <BACKUP_DIR>
+    # or, if you would rather not change ownership on the NAS:
+    #   user: "0:0"
+    # uncommenting that line, which runs the container as root.
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8787/api/summary').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 60s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+# Two containers would have been the obvious shape and was rejected: two processes
+# writing one SQLite file across a share is a locking risk not worth taking with the
+# only copy of the history. One container runs the API and the daily job together.
+#
+# Nothing else needs scheduling on the NAS: the daily collection and backup run
+# inside this container at SCHEDULE_HOUR_NZ (Pacific/Auckland).
+#
+# If your Container Station ignores deploy.resources.limits, drop it; it is only
+# there to keep the container from competing with everything else on the NAS.
+# Newer Container Station builds honour it, older ones silently ignore it.

@@ -288,6 +288,10 @@ compressing. Verified with no horizontal overflow at 375px and 393px.
   VPN rather than exposing the port; set `API_HOST` only if you have done that.
 * `data/sharesies.db` is the only copy of your history, because Akahu cannot re-serve
   past values. Back it up. It is git-ignored, so the backup is yours to arrange.
+* **Watch out for `git clean -xdf`.** `data/` and `backups/` are ignored on purpose, and
+  `-x` deletes ignored files too — one command would take the history with it. If you
+  want them out of reach of git entirely, move `DB_PATH` and `BACKUP_DIR` outside the
+  repository, or point the container's mounts at a NAS share.
 * Revoke access at <https://my.akahu.nz/connections> if you stop using this.
 
 ## Not financial advice
