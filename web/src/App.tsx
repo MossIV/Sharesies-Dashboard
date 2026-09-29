@@ -226,7 +226,10 @@ export default function App() {
       </div>
 
       <div className="grid cols-2" style={{ marginBottom: 16 }}>
-        <ContributionsChart series={series} contributions={contributions.contributions} />
+        <ContributionsChart
+          series={contributions.series}
+          contributionCount={contributions.counts.inGoal}
+        />
         <ContributionLog
           contributions={contributions.contributions}
           accounts={accounts.accounts}

@@ -14,7 +14,14 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import type { Contribution, EvaluatedMilestone, Holdings, Projection, SnapshotSeries } from "../api.ts";
+import type {
+  ContributionSeries,
+  EvaluatedMilestone,
+  Holdings,
+  Projection,
+  SnapshotSeries,
+} from "../api.ts";
+
 import { nzd, shortDate } from "../api.ts";
 
 const GRID = "#24304e";
@@ -217,69 +224,120 @@ export function ProjectionChart({ projection }: { projection: Projection | null 
   );
 }
 
-/** Stacked area: how much of the value is deposits versus growth. */
+/**
+ * How much of the value is contributions versus growth.
+ *
+ * The arithmetic is done server-side (`src/domain/contributions.ts`) because the
+ * identity `value = contributions + growth` only holds when both sides describe the
+ * same accounts, and the scope rule that decides that lives in the database.
+ *
+ * The rendering has one rule of its own: a stacked area cannot draw a negative
+ * layer, and growth can legitimately be negative — a market fall, a withdrawal, or
+ * contributions logged against a portfolio the goal does not track. Stacking
+ * anyway is what made this chart unreadable, so when growth goes below zero the
+ * same two series are drawn as lines instead, with the shortfall stated.
+ */
 export function ContributionsChart({
   series,
-  contributions,
+  contributionCount,
 }: {
-  series: SnapshotSeries | null;
-  contributions: Contribution[];
+  series: ContributionSeries | null;
+  contributionCount: number;
 }) {
-  const points = series?.points ?? [];
-
-  // Cumulative deposits as of each snapshot date; the remainder is growth.
-  const rows = points.map((point) => {
-    const contributed = contributions
-      .filter((entry) => entry.contributionDate <= point.date)
-      .reduce((sum, entry) => sum + entry.amountNzd, 0);
-    return {
-      date: point.date,
-      contributions: Math.round(contributed * 100) / 100,
-      growth: Math.round((point.value - contributed) * 100) / 100,
-    };
-  });
+  const rows = series?.rows ?? [];
+  const latest = series?.latest ?? null;
+  const safeToStack = rows.length > 0 && rows.every((row) => row.growth >= 0);
 
   return (
     <div className="card">
       <h2>
         Contributions vs growth
-        <span className="hint">needs the contribution log</span>
+        <span className="hint">
+          {latest
+            ? `${nzd(latest.value)} value · ${nzd(latest.contributions)} contributed`
+            : "needs the contribution log"}
+        </span>
       </h2>
 
-      {contributions.length === 0 ? (
+      {contributionCount === 0 ? (
         <p className="empty">
           No contributions logged. Akahu cannot see your Sharesies trades, so log deposits below (or import the
           Sharesies Transaction Report) to separate deposits from growth.
         </p>
+      ) : rows.length === 0 ? (
+        <p className="empty">
+          No history yet. The chart needs at least one collected snapshot to plot contributions against.
+        </p>
       ) : (
         <>
           <ResponsiveContainer width="100%" height={230}>
-            <AreaChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
-              <CartesianGrid stroke={GRID} vertical={false} />
-              <XAxis dataKey="date" tickFormatter={shortDate} {...axisProps} minTickGap={40} />
-              <YAxis tickFormatter={compactTick} {...axisProps} width={64} />
-              <Tooltip content={<TooltipBox />} />
-              <Legend wrapperStyle={{ fontSize: 12, color: AXIS }} />
-              <Area
-                type="monotone"
-                dataKey="contributions"
-                name="Deposits"
-                stackId="1"
-                stroke={ACCENT}
-                fill={ACCENT}
-                fillOpacity={0.35}
-              />
-              <Area
-                type="monotone"
-                dataKey="growth"
-                name="Growth"
-                stackId="1"
-                stroke={GOOD}
-                fill={GOOD}
-                fillOpacity={0.3}
-              />
-            </AreaChart>
+            {safeToStack ? (
+              <AreaChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis dataKey="date" tickFormatter={shortDate} {...axisProps} minTickGap={40} />
+                <YAxis tickFormatter={compactTick} {...axisProps} width={64} />
+                <Tooltip content={<TooltipBox />} />
+                <Legend wrapperStyle={{ fontSize: 12, color: AXIS }} />
+                <Area
+                  type="monotone"
+                  dataKey="contributions"
+                  name="Contributions"
+                  stackId="1"
+                  stroke={ACCENT}
+                  fill={ACCENT}
+                  fillOpacity={0.35}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="growth"
+                  name="Growth"
+                  stackId="1"
+                  stroke={GOOD}
+                  fill={GOOD}
+                  fillOpacity={0.3}
+                />
+              </AreaChart>
+            ) : (
+              <LineChart data={rows} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
+                <CartesianGrid stroke={GRID} vertical={false} />
+                <XAxis dataKey="date" tickFormatter={shortDate} {...axisProps} minTickGap={40} />
+                <YAxis tickFormatter={compactTick} {...axisProps} width={64} />
+                <Tooltip content={<TooltipBox />} />
+                <Legend wrapperStyle={{ fontSize: 12, color: AXIS }} />
+                <Line
+                  type="monotone"
+                  dataKey="value"
+                  name="Portfolio value"
+                  stroke={GOOD}
+                  strokeWidth={2.2}
+                  dot={rows.length <= 40}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="contributions"
+                  name="Contributions"
+                  stroke={ACCENT}
+                  strokeWidth={2}
+                  dot={rows.length <= 40}
+                />
+              </LineChart>
+            )}
           </ResponsiveContainer>
+
+          {!safeToStack && latest && (
+            <div className="callout" style={{ marginTop: 12 }}>
+              Contributions ({nzd(latest.contributions)}) are above the portfolio value ({nzd(latest.value)}) by{" "}
+              <strong>{nzd(series?.maxShortfall ?? latest.contributions - latest.value)}</strong>, so the two are
+              drawn as lines rather than a stack: a stacked area cannot show a negative layer. The usual causes are
+              contributions logged against an account the goal does not track, or a value that has fallen below what
+              was put in.
+            </div>
+          )}
+
+          <p className="muted tiny" style={{ marginTop: 8 }}>
+            Contributions are only the rows the goal counts, so this line and the goal's value describe the same
+            accounts.
+          </p>
         </>
       )}
     </div>
