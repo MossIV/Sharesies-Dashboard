@@ -8,6 +8,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { todayNz } from "../db/client.ts";
 import {
   getActiveGoal,
+  latestSnapshotPerAccount,
   latestSnapshots,
   latestSyncRun,
   listAccounts,
@@ -105,7 +106,12 @@ export function trailingChange(series: { date: string; value: number }[], today:
 export function buildSyncHealth(db: DatabaseSync, now: Date, today: string): SyncHealth {
   // Every account is listed, including the ones the user excluded: an excluded
   // KiwiSaver account is still worth seeing, it just does not move the goal.
-  const latest = latestSnapshots(db, { scope: "all" });
+  //
+  // Per account, not "whatever was collected on the newest date": an account that
+  // was not collected on the newest date — a failed fetch for one connection, or
+  // an account added later — would otherwise vanish from the strip entirely,
+  // which is the one place it is supposed to be visible.
+  const latest = latestSnapshotPerAccount(db);
   const run = latestSyncRun(db);
   const history = listSnapshots(db, { scope: "all" });
   const registry = new Map(listAccounts(db).map((account) => [account.accountId, account]));

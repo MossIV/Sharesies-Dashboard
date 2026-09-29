@@ -213,15 +213,32 @@ export function totalSeries(db: DatabaseSync, options: SnapshotQuery = {}): Valu
   return rows.map((row) => ({ date: s(row["date"]), value: n(row["value"]) }));
 }
 
-export function latestSnapshotDate(db: DatabaseSync): string | null {
-  const row = db.prepare("SELECT MAX(snapshot_date) AS d FROM snapshots").get() as Row | undefined;
+/**
+ * The newest date that has a snapshot *in the requested scope*.
+ *
+ * The scope matters: taking the global maximum would let a snapshot from an
+ * excluded account set the date, and then a scoped query for that date returns
+ * nothing — so the goal value would read as zero because of an account that is
+ * not part of the goal.
+ */
+export function latestSnapshotDate(db: DatabaseSync, options: { scope?: "in" | "all" } = {}): string | null {
+  if ((options.scope ?? "all") === "all") {
+    const row = db.prepare("SELECT MAX(snapshot_date) AS d FROM snapshots").get() as Row | undefined;
+    return sn(row?.["d"]);
+  }
+
+  const row = db.prepare(
+    `SELECT MAX(s.snapshot_date) AS d FROM snapshots s
+      WHERE EXISTS (SELECT 1 FROM accounts a WHERE a.account_id = s.account_id AND a.in_scope = 1)`,
+  ).get() as Row | undefined;
   return sn(row?.["d"]);
 }
 
 export function latestSnapshots(db: DatabaseSync, options: { scope?: "in" | "all" } = {}): SnapshotRow[] {
-  const latest = latestSnapshotDate(db);
+  const scope = options.scope ?? "in";
+  const latest = latestSnapshotDate(db, { scope });
   if (!latest) return [];
-  return listSnapshots(db, { from: latest, to: latest, scope: options.scope ?? "in" });
+  return listSnapshots(db, { from: latest, to: latest, scope });
 }
 
 /**
@@ -461,11 +478,25 @@ export function deleteMilestone(db: DatabaseSync, id: number): boolean {
 /**
  * Stamp `first_reached_on` for any milestone the series has now reached.
  * Only ever sets it once; a later dip must not clear it.
+ *
+ * "The series" is the same one the dashboard draws: the in-scope accounts summed
+ * per day. Comparing each snapshot row on its own — which is what this did — let
+ * an account *outside* the goal scope reach a milestone, so a $4,500 milestone
+ * was stamped the day a $13,400 excluded account was collected while the goal
+ * itself read 1.2%. It also fired the notification, which then consumed the
+ * once-per-channel send for a milestone that had not actually been reached.
  */
 export function stampReachedMilestones(db: DatabaseSync): number {
   const rows = db.prepare(
-    `SELECT m.id, m.amount_nzd, m.first_reached_on,
-            (SELECT MIN(snapshot_date) FROM snapshots WHERE value_nzd >= m.amount_nzd) AS reached_on
+    `SELECT m.id, m.amount_nzd,
+            (SELECT MIN(d.day) FROM (
+                SELECT s.snapshot_date AS day, SUM(s.value_nzd) AS total
+                  FROM snapshots s
+                 WHERE EXISTS (SELECT 1 FROM accounts a
+                                WHERE a.account_id = s.account_id AND a.in_scope = 1)
+                 GROUP BY s.snapshot_date
+             ) d
+             WHERE d.total >= m.amount_nzd) AS reached_on
        FROM milestones m
       WHERE m.first_reached_on IS NULL`,
   ).all() as Row[];
