@@ -14,6 +14,8 @@ delete process.env["AKAHU_APP_TOKEN"];
 delete process.env["AKAHU_USER_TOKEN"];
 
 const NOW = new Date("2026-09-28T04:00:00.000Z");
+/** The calendar date the seeded history lands on, so the summary can be judged against it. */
+const TODAY = "2026-09-28";
 
 function fakeSource(fixture: string): PortfolioSource {
   const raw = loadFixture(fixture);
@@ -27,7 +29,10 @@ function fakeSource(fixture: string): PortfolioSource {
 async function seededApp() {
   const db = testDb();
   await collectOnce(db, { source: fakeSource("accounts.sharesies-portfolio.sample.json"), now: NOW });
-  return { db, app: createApp(db) };
+  // The clock is pinned so "stale" means what the test means by it: staleness is
+  // measured in hours since the source refreshed, so a fixture refreshed on a fixed
+  // date goes stale simply because the suite is run later.
+  return { db, app: createApp(db, { today: TODAY, now: NOW }) };
 }
 
 async function json<T = any>(response: Response): Promise<T> {
