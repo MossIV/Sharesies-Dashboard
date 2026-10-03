@@ -311,6 +311,12 @@ not a code change. New accounts are judged against `AKAHU_CONNECTION_MATCH`
 the card shows that rule so it is not magic. Widening is safe to do late because
 every account is snapshotted whether or not it is in scope.
 
+**KiwiSaver stays out of scope by decision.** It is connected, registered and
+snapshotted like everything else, and deliberately not counted toward the goal: the
+goal is about one Sharesies portfolio growing, and a KiwiSaver balance would answer a
+different question. Recording it here because it is now a choice rather than a
+side effect of what happened to be connected.
+
 ---
 
 ## Mobile

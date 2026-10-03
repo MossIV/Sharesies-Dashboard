@@ -44,7 +44,7 @@ Answered before the first real collection; the reasoning is in the plan's sectio
 
 | Decision | Taken |
 |---|---|
-| Goal scope | Sharesies accounts only, and only one of the two the connection exposes. The other is registered and snapshotted daily but excluded from the goal. |
+| Goal scope | Sharesies accounts only, and only one of the two the connection exposes. The other is registered and snapshotted daily but excluded from the goal. KiwiSaver is out of scope by standing decision rather than by accident: it is connected, registered and snapshotted, and excluded deliberately by the connection-and-type rule. |
 | Target | A single amount on that one portfolio, with no target date. Standard 25/50/75/100% milestones. |
 | Progress basis | Portfolio value (not net contributions). |
 | Hosting | A container on a NAS (QNAP Container Station), tested locally first — and now running there. |
