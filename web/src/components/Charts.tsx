@@ -220,7 +220,112 @@ export function ProjectionChart({ projection }: { projection: Projection | null 
       )}
 
       <p className="disclaimer">{projection.disclaimer}</p>
+
+      <WhereTheReturnComesFrom returns={projection.returns} />
     </div>
+  );
+}
+
+const RETURN_SOURCE_LABEL: Record<string, string> = {
+  derived: "derived from your allocation",
+  setting: "the figure you set in Settings",
+  environment: "from ASSUMED_ANNUAL_RETURN in .env",
+  default: "the built-in default, with no holdings to weight",
+  query: "overridden for this view",
+};
+
+/**
+ * The working behind the assumed return.
+ *
+ * A projection is arithmetic on an assumption, and an assumption nobody can inspect is
+ * a number the reader has to trust. The funds' own observed returns are shown beside
+ * the figures used, including where they are lower: NZG returned less than the equity
+ * assumption over its six-year window, and hiding that would make the table look like
+ * a track record rather than a comparison.
+ */
+function WhereTheReturnComesFrom({ returns }: { returns: Projection["returns"] }) {
+  const classes = [...new Set(returns.holdings.map((holding) => holding.assetClass))];
+  const pct = (value: number | null): string =>
+    value === null ? "–" : `${(value * 100).toFixed(1)}%`;
+
+  return (
+    <details style={{ marginTop: 10 }}>
+      <summary className="muted tiny" style={{ cursor: "pointer" }}>
+        Where the {(returns.annualReturn * 100).toFixed(1)}% assumption comes from
+      </summary>
+
+      <p className="muted tiny" style={{ marginTop: 8 }}>
+        Base return: <strong>{(returns.annualReturn * 100).toFixed(1)}%</strong> —{" "}
+        {RETURN_SOURCE_LABEL[returns.source] ?? returns.source}
+        {returns.observedAnnualReturn !== null && (
+          <>
+            . The same allocation&rsquo;s funds have returned{" "}
+            <strong>{(returns.observedAnnualReturn * 100).toFixed(1)}%</strong> a year since their own
+            inception, to {returns.asOf}
+          </>
+        )}
+        {returns.covered < 1 && !Number.isNaN(returns.covered) && (
+          <>
+            {". "}
+            <span className="badge warn">
+              {Math.round(returns.covered * 100)}% of value matched
+            </span>
+            {returns.unmatched.length > 0 && ` (${returns.unmatched.join(", ")} not in the table)`}
+          </>
+        )}
+        .
+      </p>
+
+      {returns.holdings.length > 0 && (
+        <table>
+          <thead>
+            <tr>
+              <th>Fund</th>
+              <th className="num">Weight</th>
+              <th className="num">Assumed</th>
+              <th className="num">Observed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {returns.holdings.map((holding) => (
+              <tr key={holding.symbol}>
+                <td className="tiny">
+                  <span className="mono">{holding.symbol}</span>{" "}
+                  <span className="muted">{holding.assetClass}</span>
+                </td>
+                <td className="num mono tiny">{(holding.weight * 100).toFixed(1)}%</td>
+                <td className="num mono tiny">{pct(holding.assumedReturn)}</td>
+                <td className="num mono tiny">
+                  {pct(holding.observedReturn)}
+                  {holding.observedReturn < holding.assumedReturn && (
+                    <span className="muted" title="below the assumption over its own window">
+                      {" "}
+                      ↓
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <p className="muted tiny" style={{ marginTop: 8 }}>
+        <strong>Assumed</strong> is a long-run figure per asset class;{" "}
+        <strong>observed</strong> is what the fund actually returned over its own window, from
+        adjusted closes (so distributions are included), after fees and before tax. Recent years
+        have been good ones for global shares, and the assumption is below them on purpose:
+        extrapolating the last six years forward would be a forecast this is not. Recompute the
+        observed figures with <span className="mono">npm run fund:returns</span>.
+      </p>
+
+      {classes.map((assetClass) => (
+        <p className="muted tiny" key={assetClass} style={{ marginTop: 4 }}>
+          <strong>{assetClass}</strong> at {pct(returns.assetClasses[assetClass]?.rate ?? null)}:{" "}
+          {returns.assetClasses[assetClass]?.rationale}
+        </p>
+      ))}
+    </details>
   );
 }
 
