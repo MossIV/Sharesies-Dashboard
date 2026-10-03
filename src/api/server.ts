@@ -31,7 +31,13 @@ import { syncRoutes } from "./routes/sync.ts";
 export const DEFAULT_PORT = 8787;
 export const DEFAULT_HOST = "127.0.0.1";
 
-export function createApp(db: DatabaseSync, options: { today?: string } = {}): Hono {
+/**
+ * `today` and `now` pin the clock the summary is judged against. They exist for tests:
+ * staleness is measured in hours since the source refreshed and in days since the last
+ * snapshot, so a test seeding fixed dates would otherwise pass on the day it was
+ * written and fail a week later.
+ */
+export function createApp(db: DatabaseSync, options: { today?: string; now?: Date } = {}): Hono {
   const app = new Hono();
 
   // The Vite dev server runs on a different origin, so it needs CORS. The
@@ -56,7 +62,7 @@ export function createApp(db: DatabaseSync, options: { today?: string } = {}): H
     return c.json({ error: "Internal server error" }, 500);
   });
 
-  app.route("/api", summaryRoutes(db));
+  app.route("/api", summaryRoutes(db, options));
   app.route("/api", snapshotRoutes(db));
   app.route("/api", accountRoutes(db));
   app.route("/api", importRoutes(db));

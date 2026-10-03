@@ -153,7 +153,7 @@ test("a stale excluded account does not mark the goal data stale", async () => {
   db.prepare("UPDATE snapshots SET source_refreshed_at = '2026-08-01T00:00:00.000Z' WHERE account_id = ?")
     .run("acc_ks_provider_0001");
 
-  const app = createApp(db);
+  const app = createApp(db, { today: "2026-09-28", now: NOW });
   const summary = await (await app.request("/api/summary")).json() as any;
   assert.equal(summary.syncHealth.stale, false);
   // It is still visible in the strip, flagged as out of scope.

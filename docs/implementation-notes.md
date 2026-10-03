@@ -192,6 +192,61 @@ Two smaller things the report settled:
   trades. A file that names no portfolio, with a goal that tracks exactly one
   account, has its rows follow that account and says so in the preview.
 
+## Where the projection's assumed return comes from
+
+The projection used a single number for the whole portfolio: `ASSUMED_ANNUAL_RETURN=0.07`,
+or whatever was typed into Settings. That is a reasonable placeholder and a poor description
+of a portfolio that is 95% global and Australasian shares with the rest in bonds and cash,
+because the allocation is the thing that decides the answer.
+
+The default is now the allocation-weighted average of a long-run assumption per asset class,
+taken from the holdings Akahu already reports. On the live portfolio:
+
+| Fund | Class | Weight | Assumed | Observed | Window |
+|---|---|---|---|---|---|
+| TWH — Smart Total World (NZD Hedged) | equity | 42.7% | 7.0% | 12.9% | 6.2y |
+| TWF — Smart Total World | equity | 28.5% | 7.0% | 11.4% | 11.2y |
+| AUS — Smart Australian Top 200 | equity | 11.9% | 7.0% | 12.4% | 6.2y |
+| NZG — Smart S&P/NZX 50 | equity | 11.9% | 7.0% | 3.4% | 6.2y |
+| AGG — Smart Global Aggregate Bond | bond | 3.5% | 3.5% | 0.5% | 7.3y |
+| NZB — Smart NZ Bond | bond | 1.2% | 3.5% | 3.3% | 10.9y |
+| NZC — Smart NZ Cash | cash | 0.2% | 3.0% | 2.9% | 10.9y |
+| **Weighted** | | 100% | **6.82%** | **10.71%** | |
+
+The observed column is total return from adjusted closes (so distributions are included),
+after fund fees and before tax, to 2026-10-02. `npm run fund:returns` recomputes it from
+market data and reports any figure that has drifted from the committed table by more than
+half a percentage point, so the table is checked rather than trusted.
+
+Two things this made clear enough to write down:
+
+* **The assumption is lower than the observation on purpose.** Six years of global shares
+  returning 11-13% a year in NZD is an exceptional period, and projecting it forward is the
+  "forecast this is not" that the labelling exists to prevent. The cross-check is close
+  enough to have confidence in the data: published figures put TWF's five-year return at
+  11.5% (Sorted, after fees and tax, to May 2026) and 14.2% p.a. after fees and before tax
+  (fund update). This table says 15.3% to October 2026 — the difference is the window end
+  and the tax basis, not a disagreement about the fund.
+* **The comparison does not hold per fund, which is why the assumption is per class.** NZG
+  returned 3.4% a year over its window, below the 7% equity assumption. A six-year window on
+  one market says little about the next twenty, so the per-fund evidence is displayed beside
+  the assumption rather than averaged into it.
+
+`resolveAnnualReturn` reports where the figure came from — `setting`, `environment`,
+`derived` or `default` — and the projection card shows the whole working: the weights, both
+figures per fund, and the reason for each asset-class number. An explicit setting still wins;
+a derived figure that quietly overrode a typed one would be the opposite of the point.
+
+**Not done here, deliberately:** the low and high scenarios are still a fixed ±2 percentage
+points while the same data yields a weighted volatility of 15.6%. Deriving the band from that
+is the obvious next step and a bigger change than this one.
+
+One thing this work turned up that had nothing to do with projections: two summary tests
+failed as soon as the suite was run a few days after the dates they seeded. Staleness is
+measured in hours since the source refreshed (from `now`) and in days since the last snapshot
+(from `today`), and the tests pinned neither, so they passed on the day they were written and
+failed later. `createApp` now accepts both and the summary route passes them through.
+
 ## Known gaps
 
 * **One snapshot of history so far.** Pace, and the 7/30-day change figures, need a few

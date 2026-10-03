@@ -164,6 +164,34 @@ export interface Projection {
     spread: number;
     months: number;
   };
+  /**
+   * Where the assumed return came from, and what the portfolio's own funds have
+   * actually returned. The projection is arithmetic on an assumption; this is the
+   * working behind it, so the assumption can be shown next to its evidence.
+   */
+  returns: {
+    source: "setting" | "environment" | "derived" | "default" | "query";
+    annualReturn: number;
+    /** The allocation-weighted figure, when the holdings allowed one. */
+    derivedAnnualReturn: number | null;
+    /** The same allocation's observed returns, for comparison. */
+    observedAnnualReturn: number | null;
+    volatility: number | null;
+    /** Share of the portfolio's value the derived figure describes. */
+    covered: number;
+    unmatched: string[];
+    asOf: string;
+    holdings: {
+      symbol: string;
+      name: string;
+      assetClass: "equity" | "bond" | "cash";
+      weight: number;
+      value: number;
+      assumedReturn: number;
+      observedReturn: number;
+    }[];
+    assetClasses: Record<string, { rate: number; rationale: string }>;
+  };
   scenarios: {
     key: "low" | "base" | "high";
     annualReturn: number;

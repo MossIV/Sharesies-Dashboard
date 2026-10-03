@@ -14,6 +14,7 @@
     "collect": "node --env-file-if-exists=.env src/collector/run.ts",
     "import:csv": "node --env-file-if-exists=.env scripts/import-csv.ts",
     "detect-transfers": "node --env-file-if-exists=.env scripts/detect-transfers.ts",
+    "fund:returns": "node scripts/fund-returns.ts",
     "backup": "node --env-file-if-exists=.env scripts/backup.ts",
     "spike": "node --env-file-if-exists=.env scripts/spike-akahu.ts",
     "image:nas": "bash scripts/build-nas-image.sh",
