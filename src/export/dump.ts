@@ -86,7 +86,10 @@ export function buildDump(db: DatabaseSync): Dump {
     snapshots: dump.snapshots.length,
     holdings: dump.holdings.length,
     contributions: dump.contributions.length,
+    /** Every row in scope, no basis filter: deterministic, and independent of the setting. */
     netContributions: netContributions(db),
+    /** Money in under the stricter basis, so the dump names both rather than guessing. */
+    netContributionsExternal: netContributions(db, { basis: "external" }),
     // Everything, including what sits outside the goal, so the two can be told apart.
     netContributionsAll: netContributions(db, { scope: "all" }),
   };
@@ -108,7 +111,9 @@ export function storageCounts(db: DatabaseSync): Dump["counts"] {
     snapshots: one("SELECT COUNT(*) AS count FROM snapshots"),
     holdings: one("SELECT COUNT(*) AS count FROM holding_snapshots"),
     contributions: one("SELECT COUNT(*) AS count FROM contributions"),
+    /** Every row in scope, no basis filter: deterministic, and independent of the setting. */
     netContributions: netContributions(db),
+    netContributionsExternal: netContributions(db, { basis: "external" }),
     netContributionsAll: netContributions(db, { scope: "all" }),
   };
 }

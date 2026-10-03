@@ -229,12 +229,16 @@ export default function App() {
         <ContributionsChart
           series={contributions.series}
           contributionCount={contributions.counts.inGoal}
+          basis={contributions.basis}
         />
         <ContributionLog
           contributions={contributions.contributions}
           accounts={accounts.accounts}
           totalAllTime={contributions.totalAllTime}
           excludedTotalAllTime={contributions.excludedTotalAllTime}
+          basis={contributions.basis}
+          basisNote={contributions.basisNote}
+          notCounted={contributions.counts.inGoalNotCounted}
           onAdd={async (body) => {
             await api.addContribution(body);
             await load();

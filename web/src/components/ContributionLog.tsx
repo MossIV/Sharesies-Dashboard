@@ -27,6 +27,9 @@ export function ContributionLog({
   accounts,
   totalAllTime,
   excludedTotalAllTime,
+  basis,
+  basisNote,
+  notCounted,
   onAdd,
   onDelete,
   defaultScope = "goal",
@@ -35,6 +38,11 @@ export function ContributionLog({
   accounts: Account[];
   totalAllTime: number;
   excludedTotalAllTime: number;
+  /** What `totalAllTime` is counting, and why, both decided server-side. */
+  basis: "external" | "trades";
+  basisNote: string;
+  /** Rows the goal holds that the basis leaves out: internal movements, not money in. */
+  notCounted: number;
   onAdd: (body: { contributionDate: string; amountNzd: number; note?: string }) => Promise<unknown>;
   onDelete: (id: number) => Promise<unknown>;
   /** Which list opens first. "all" is for looking at what the goal leaves out. */
@@ -98,10 +106,15 @@ export function ContributionLog({
       <h2>
         Contribution log
         <span className="hint">
-          {nzd(totalAllTime)} in the goal
+          {nzd(totalAllTime)} {basis === "external" ? "sent to Sharesies" : "in the goal"}
           {excludedTotalAllTime !== 0 ? ` · ${nzd(excludedTotalAllTime)} logged outside it` : ""}
+          {notCounted !== 0 ? ` · ${notCounted} internal row(s) not counted` : ""}
         </span>
       </h2>
+
+      {/* What the figure above is counting. Stated rather than implied, because "money
+          in" means different things with and without a bank feed to read. */}
+      <p className="muted tiny" style={{ marginTop: 0, marginBottom: 12 }}>{basisNote}</p>
 
       <div className="form-row">
         <div style={{ flex: "0 1 150px" }}>
@@ -200,6 +213,15 @@ export function ContributionLog({
                       {!entry.inGoal && (
                         <span className="badge warn" style={{ marginLeft: 6 }}>
                           outside goal
+                        </span>
+                      )}
+                      {entry.inGoal && !entry.counted && (
+                        <span
+                          className="badge"
+                          style={{ marginLeft: 6 }}
+                          title="The goal holds this account, but the row is a movement inside the platform rather than money sent in, so the contributions figure leaves it out"
+                        >
+                          internal
                         </span>
                       )}
                     </td>

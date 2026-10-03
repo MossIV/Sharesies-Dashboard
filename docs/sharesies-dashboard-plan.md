@@ -273,6 +273,14 @@ kept so the reasoning stays visible.
    tracks one of them, see (2). No KiwiSaver or bank accounts are counted. The scope
    is a per-account flag, so including another account later is a click, and every
    account is snapshotted either way so the history is there to backfill.
+
+   **Restated on 2026-10-03, when every account was connected to Akahu:** the
+   Simplicity KiwiSaver account and the ANZ spending account are now visible, and
+   **KiwiSaver stays out of scope by decision.** Worth stating plainly because it is
+   now a choice rather than a consequence: the account is excluded by the
+   connection-and-type rule, not by being invisible to the collector, so the
+   exclusion is deliberate and revisitable. Its daily snapshots accumulate regardless,
+   which is what makes revisiting it cheap later.
 2. **Target:** amount, optional date, and the first milestones.
    **A set amount, no target date, measured on one Sharesies portfolio** (the
    Recommended Investment Portfolio). The other account is deliberately *not*
