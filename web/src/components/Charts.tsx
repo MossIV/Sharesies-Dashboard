@@ -431,11 +431,19 @@ export function ContributionsChart({
 
           {!safeToStack && latest && (
             <div className="callout" style={{ marginTop: 12 }}>
-              Contributions ({nzd(latest.contributions)}) are above the portfolio value ({nzd(latest.value)}) by{" "}
-              <strong>{nzd(series?.maxShortfall ?? latest.contributions - latest.value)}</strong>, so the two are
-              drawn as lines rather than a stack: a stacked area cannot show a negative layer. The usual causes are
-              contributions logged against an account the goal does not track, or a value that has fallen below what
-              was put in.
+              Contributions ({nzd(latest.contributions)}) are{" "}
+              <strong>{nzd(latest.contributions - latest.value)}</strong> above the portfolio value (
+              {nzd(latest.value)}) at the latest snapshot, so the two are drawn as lines rather than a stack: a
+              stacked area cannot show a negative layer.
+              {series?.maxShortfallDate && series.maxShortfall - (latest.contributions - latest.value) > 0.005 && (
+                <>
+                  {" "}
+                  The widest gap was <strong>{nzd(series.maxShortfall)}</strong>, on{" "}
+                  {shortDate(series.maxShortfallDate)};
+                </>
+              )}{" "}
+              that usually means contributions logged against an account the goal does not track, or a value that
+              has fallen below what was put in.
             </div>
           )}
 

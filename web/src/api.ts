@@ -140,6 +140,8 @@ export interface ContributionSeries {
   rows: { date: string; value: number; contributions: number; growth: number }[];
   belowContributions: boolean;
   maxShortfall: number;
+  /** When the widest gap happened; not necessarily the latest point. */
+  maxShortfallDate: string | null;
   latest: { date: string; value: number; contributions: number; growth: number } | null;
 }
 

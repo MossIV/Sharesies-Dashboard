@@ -43,6 +43,15 @@ export interface ContributionSeries {
   belowContributions: boolean;
   /** The largest such excess, so the UI can say how far below. */
   maxShortfall: number;
+  /**
+   * When the largest excess happened.
+   *
+   * It is not necessarily the latest point, which is the trap this was reported for: the
+   * callout names the newest contributions and value and printed the widest gap beside
+   * them, so 8,013.91 against 5,211.51 was described as being "above by 7,800.37". The
+   * date is what lets the UI say which gap it means.
+   */
+  maxShortfallDate: string | null;
   /** The newest row, or null with no history. */
   latest: ContributionChartRow | null;
 }
@@ -77,11 +86,19 @@ export function contributionSeries(input: {
     });
   }
 
-  const shortfalls = rows.filter((row) => row.growth < 0).map((row) => -row.growth);
+  const shortfalls = rows
+    .filter((row) => row.growth < 0)
+    .map((row) => ({ amount: -row.growth, date: row.date }));
+  const worst = shortfalls.reduce<{ amount: number; date: string | null }>(
+    (max, entry) => (entry.amount > max.amount ? entry : max),
+    { amount: 0, date: null },
+  );
+
   return {
     rows,
     belowContributions: shortfalls.length > 0,
-    maxShortfall: shortfalls.length > 0 ? round(Math.max(...shortfalls)) : 0,
+    maxShortfall: round(worst.amount),
+    maxShortfallDate: worst.date,
     latest: rows.at(-1) ?? null,
   };
 }
