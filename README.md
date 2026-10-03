@@ -58,6 +58,7 @@ real portfolio figures.
 | `npm run backup` | Copy the database with `VACUUM INTO` and verify the copy |
 | `npm run import:csv` | Import a Sharesies transaction report (`-- --file path.csv --apply`) |
 | `npm run detect-transfers` | Scan the bank feed for transfers into Sharesies, without logging them |
+| `npm run fund:returns` | Recompute the funds' observed returns from market data, and check the committed table |
 | `npm run web:build` | Build the dashboard into `web/dist` for the API to serve |
 | `npm run image:nas` | Build the container image and export a tar Container Station can import |
 | `npm run image:push -- <registry>/<image>` | Build, tag and push to a registry instead, which is the lighter update path |
@@ -339,3 +340,10 @@ compressing. Verified with no horizontal overflow at 375px and 393px.
 Projections are arithmetic on assumptions you set (`V[n+1] = V[n] * (1 + r/12) + c`), with
 low and high cases at ±2 percentage points. They are labelled as assumptions throughout
 the UI, and they are not predictions.
+
+The assumed return starts from your allocation rather than from one blanket rate: it is the
+weighted average of a long-run figure per asset class (equities, bonds, cash), using the
+holdings Akahu reports. The projection card shows that working, including what each fund has
+actually returned over its own window, which is higher than the assumption on purpose —
+recent years have been good ones for global shares and extrapolating them is the forecast
+this is not. Set a figure in Settings, or `ASSUMED_ANNUAL_RETURN` in `.env`, to override it.

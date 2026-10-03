@@ -112,6 +112,9 @@ rate stored on the row.
 
 **Projections.** Month-by-month arithmetic at low/base/high assumptions, labelled
 throughout as assumptions rather than predictions, with a required-contribution figure.
+The assumed return defaults to an allocation-weighted long-run figure derived from the funds
+the portfolio holds, with each fund's observed return shown beside it, and the per-fund
+evidence recomputed from market data by `npm run fund:returns`.
 
 **Alerts.** A reached milestone is announced once per channel and never again, enforced
 by a `UNIQUE (milestone_id, channel)` constraint rather than in memory, so a restart
