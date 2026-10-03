@@ -23,7 +23,7 @@ import { daysBetween } from "../domain/dates.ts";
 import { evaluateMilestones, nextMilestone } from "../domain/milestones.ts";
 import type { EvaluatedMilestone } from "../domain/milestones.ts";
 import { STALE_AFTER_HOURS } from "../collector/collect.ts";
-import { getAssumptions } from "./settings.ts";
+import { getAssumptions, resolveContributionsBasis } from "./settings.ts";
 
 export interface AccountHealth {
   accountId: string;
@@ -188,7 +188,8 @@ export function buildSummary(
   const series = totalSeries(db);
   const snapshots = latestSnapshots(db);
   const currentValue = snapshots.reduce((sum, snapshot) => sum + snapshot.valueNzd, 0);
-  const contributions = netContributions(db);
+  const basis = resolveContributionsBasis(db);
+  const contributions = netContributions(db, { basis: basis.basis });
   const assumptions = getAssumptions(db);
 
   const goal = getActiveGoal(db);

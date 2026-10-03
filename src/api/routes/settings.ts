@@ -13,9 +13,13 @@ import {
 import {
   ANNUAL_RETURN_RANGE,
   MONTHLY_CONTRIBUTION_RANGE,
+  basisPayload,
   getAssumptions,
+  resolveContributionsBasis,
   setAssumptions,
+  setContributionsBasis,
 } from "../settings.ts";
+import { parseBasis, type RequestedBasis } from "../../domain/contributions-basis.ts";
 
 export const MANUAL_VALUE_SETTING = "manual_value_nzd";
 
@@ -25,11 +29,13 @@ export function settingsRoutes(db: DatabaseSync): Hono {
   /** Assumptions plus the current data-source configuration. */
   app.get("/settings", (c) => {
     const assumptions = getAssumptions(db);
+    const basis = resolveContributionsBasis(db);
     const hasTokens = AkahuSource.isConfigured();
     const requested = process.env["PORTFOLIO_SOURCE"]?.trim().toLowerCase() || null;
 
     return c.json({
       assumptions,
+      contributions: basisPayload(basis),
       source: {
         requested,
         effective: requested === "manual" || (!hasTokens && requested !== "akahu") ? "manual" : "akahu",
@@ -47,7 +53,7 @@ export function settingsRoutes(db: DatabaseSync): Hono {
     });
   });
 
-  /** Update the assumed return and/or monthly contribution. */
+  /** Update the assumed return, the monthly contribution, and/or what counts as a contribution. */
   app.put("/settings", async (c) => {
     const body = await readJson(c.req.raw);
     const patch: { annualReturn?: number; monthlyContribution?: number } = {};
@@ -58,11 +64,25 @@ export function settingsRoutes(db: DatabaseSync): Hono {
     if ("monthlyContribution" in body) {
       patch.monthlyContribution = reqNumber(body, "monthlyContribution", MONTHLY_CONTRIBUTION_RANGE);
     }
-    if (Object.keys(patch).length === 0) {
-      throw badRequest("Provide annualReturn and/or monthlyContribution");
+
+    // An explicit "auto" is a real choice too: it returns the decision to the rule
+    // rather than pinning whichever basis that rule happened to resolve to today.
+    let requestedBasis: RequestedBasis | null = null;
+    if ("contributionsBasis" in body) {
+      requestedBasis = parseBasis(String(body["contributionsBasis"] ?? ""));
+      if (requestedBasis === null) {
+        throw badRequest('contributionsBasis must be "external", "trades" or "auto"');
+      }
     }
 
-    return c.json({ assumptions: setAssumptions(db, patch) });
+    if (Object.keys(patch).length === 0 && requestedBasis === null) {
+      throw badRequest("Provide annualReturn, monthlyContribution and/or contributionsBasis");
+    }
+
+    const assumptions = Object.keys(patch).length > 0 ? setAssumptions(db, patch) : getAssumptions(db);
+    const basis = requestedBasis === null ? resolveContributionsBasis(db) : setContributionsBasis(db, requestedBasis);
+
+    return c.json({ assumptions, contributions: basisPayload(basis) });
   });
 
   /**

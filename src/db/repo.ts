@@ -5,6 +5,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { tx } from "./client.ts";
 import type { Goal, ProgressBasis } from "../domain/goals.ts";
+import type { ContributionsBasis } from "../domain/contributions-basis.ts";
 import type { Milestone, MilestoneKind, ValuePoint } from "../domain/milestones.ts";
 
 export interface SnapshotRow {
@@ -581,11 +582,28 @@ export interface ContributionQuery {
   to?: string | undefined;
   /** "goal" (default) counts only what the goal holds; "all" is everything. */
   scope?: "goal" | "all";
+  /**
+   * Which rows count: "trades" (the default, and the behaviour before the setting
+   * existed) counts everything inside the scope, while "external" counts only money
+   * crossing the platform boundary. Both are applied on top of `scope`.
+   */
+  basis?: ContributionsBasis;
 }
 
-export function listContributions(db: DatabaseSync, options: ContributionQuery = {}): ContributionRow[] {
+/**
+ * The basis filter, mirroring `isExternalFlow` in the domain.
+ *
+ * Written as SQL rather than by filtering in JavaScript because the totals are SUMs:
+ * filtering after the fact would mean loading every row to add up a subset.
+ */
+function basisFilter(basis: ContributionsBasis): string {
+  if (basis === "trades") return "";
+  return `(c.source IN ('manual', 'bank') OR (c.source = 'csv' AND c.category IN ('deposit', 'withdrawal')))`;
+}
+
+function contributionFilter(options: ContributionQuery): { where: string; params: (string | number)[] } {
   const clauses: string[] = [];
-  const params: string[] = [];
+  const params: (string | number)[] = [];
   if (options.from) {
     clauses.push("c.contribution_date >= ?");
     params.push(options.from);
@@ -595,11 +613,27 @@ export function listContributions(db: DatabaseSync, options: ContributionQuery =
     params.push(options.to);
   }
   if ((options.scope ?? "goal") === "goal") clauses.push(GOAL_SCOPE_CLAUSE);
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  const basis = basisFilter(options.basis ?? "trades");
+  if (basis !== "") clauses.push(basis);
+  return { where: clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "", params };
+}
+
+export function listContributions(db: DatabaseSync, options: ContributionQuery = {}): ContributionRow[] {
+  const { where, params } = contributionFilter(options);
   const rows = db.prepare(
     `SELECT c.* FROM contributions c ${where} ORDER BY c.contribution_date ASC, c.id ASC`,
   ).all(...params) as Row[];
   return rows.map(toContribution);
+}
+
+/**
+ * Whether any row the goal holds is an external flow, which is what "auto" keys off:
+ * a history predating the bank feed has only trades to count.
+ */
+export function hasExternalContributions(db: DatabaseSync, options: { scope?: "goal" | "all" } = {}): boolean {
+  const { where, params } = contributionFilter({ ...options, basis: "external" });
+  const row = db.prepare(`SELECT COUNT(*) AS count FROM contributions c ${where}`).get(...params) as Row | undefined;
+  return n(row?.["count"]) > 0;
 }
 
 export interface ContributionInput {
@@ -642,18 +676,7 @@ export function deleteContribution(db: DatabaseSync, id: number): boolean {
 }
 
 export function netContributions(db: DatabaseSync, options: ContributionQuery = {}): number {
-  const clauses: string[] = [];
-  const params: string[] = [];
-  if (options.from) {
-    clauses.push("c.contribution_date >= ?");
-    params.push(options.from);
-  }
-  if (options.to) {
-    clauses.push("c.contribution_date <= ?");
-    params.push(options.to);
-  }
-  if ((options.scope ?? "goal") === "goal") clauses.push(GOAL_SCOPE_CLAUSE);
-  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  const { where, params } = contributionFilter(options);
   const row = db.prepare(`SELECT COALESCE(SUM(c.amount_nzd), 0) AS total FROM contributions c ${where}`)
     .get(...params) as Row | undefined;
   return Math.round(n(row?.["total"]) * 100) / 100;

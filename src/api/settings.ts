@@ -12,12 +12,19 @@
  */
 import type { DatabaseSync } from "node:sqlite";
 import { getSetting, setSetting } from "../db/client.ts";
-import { latestHoldings } from "../db/repo.ts";
+import { hasExternalContributions, latestHoldings } from "../db/repo.ts";
 import { blendAssumedReturn, type ReturnBlend } from "../domain/fund-returns.ts";
+import {
+  parseBasis,
+  resolveBasis,
+  type ContributionsBasis,
+  type RequestedBasis,
+} from "../domain/contributions-basis.ts";
 
 export const SETTING_KEYS = {
   annualReturn: "assumed_annual_return",
   monthlyContribution: "assumed_monthly_contribution",
+  contributionsBasis: "contributions_basis",
 } as const;
 
 export const DEFAULT_ANNUAL_RETURN = 0.07;
@@ -111,4 +118,78 @@ export function setAssumptions(db: DatabaseSync, patch: Partial<Assumptions>): A
     setSetting(db, SETTING_KEYS.monthlyContribution, String(patch.monthlyContribution));
   }
   return getAssumptions(db);
+}
+
+// ------------------------------------------------------- what counts as a contribution
+
+/** Where the basis in use came from. */
+export type BasisSource = "setting" | "environment" | "auto";
+
+export interface BasisResolution {
+  /** The basis actually applied. */
+  basis: ContributionsBasis;
+  /** What was asked for, which is "auto" unless someone chose explicitly. */
+  requested: RequestedBasis;
+  source: BasisSource;
+  /** Whether any in-scope row is an external flow, which is what "auto" keys off. */
+  hasExternalRows: boolean;
+}
+
+/**
+ * Which rows count as contributions.
+ *
+ * Same resolution order as the return assumption (setting, then environment), but the
+ * fallback is a decision rather than a constant: with no explicit choice, external
+ * flows win when there are any, and buys are the proxy when there are not. Reported
+ * rather than assumed, so the card can say which it is using.
+ */
+export function resolveContributionsBasis(db: DatabaseSync): BasisResolution {
+  const stored = parseBasis(getSetting(db, SETTING_KEYS.contributionsBasis));
+  const fromEnv = parseBasis(process.env["CONTRIBUTIONS_BASIS"]);
+  const requested: RequestedBasis = stored ?? fromEnv ?? "auto";
+  // The source describes where the basis *in force* came from, not which layer held
+  // the request: a stored "auto" means the rule decided, and reporting that as
+  // "setting" would read as though someone had chosen the basis by hand.
+  const source: BasisSource = requested === "auto" ? "auto" : stored !== null ? "setting" : "environment";
+  const hasExternalRows = hasExternalContributions(db);
+  return { basis: resolveBasis(requested, { hasExternalRows }), requested, source, hasExternalRows };
+}
+
+export function setContributionsBasis(db: DatabaseSync, value: RequestedBasis): BasisResolution {
+  setSetting(db, SETTING_KEYS.contributionsBasis, value);
+  return resolveContributionsBasis(db);
+}
+
+/**
+ * One sentence for the card, describing what the contributions line counts.
+ *
+ * The caveat about the platform boundary is deliberate. A transfer goes to Sharesies
+ * as a whole while the goal may track one account of several, so "money sent" and
+ * "money arrived here" are not always the same thing, and the figure should not be
+ * labelled as though they were.
+ */
+export function describeContributionsBasis(basis: ContributionsBasis): string {
+  if (basis === "external") {
+    return "Contributions count money sent to Sharesies: deposits, withdrawals, and transfers detected in the bank feed. Buys, sells, dividends and fees inside the account are logged but not counted, because they move money that has already been counted.";
+  }
+  return "No external transfers have been logged, so buys into the account stand in as a proxy for money in. Log a deposit, or run the bank-transfer scan, to switch to the stricter figure.";
+}
+
+/** The same thing as a response shape, so the routes report it identically. */
+export interface BasisPayload {
+  basis: ContributionsBasis;
+  requested: RequestedBasis;
+  source: BasisSource;
+  hasExternalRows: boolean;
+  note: string;
+}
+
+export function basisPayload(resolution: BasisResolution): BasisPayload {
+  return {
+    basis: resolution.basis,
+    requested: resolution.requested,
+    source: resolution.source,
+    hasExternalRows: resolution.hasExternalRows,
+    note: describeContributionsBasis(resolution.basis),
+  };
 }

@@ -203,15 +203,26 @@ test("contributions can be logged and totalled", async () => {
     });
 
   assert.equal((await add({ contributionDate: "2026-07-01", amountNzd: 1000 })).status, 201);
-  assert.equal((await add({ contributionDate: "2026-08-01", amountNzd: 250, source: "csv" })).status, 201);
+
+  // A report row with no category cannot be told apart from a movement inside the
+  // platform, so it is refused rather than logged into a total it would not appear in.
+  const ambiguous = await add({ contributionDate: "2026-08-01", amountNzd: 250, source: "csv" });
+  assert.equal(ambiguous.status, 400);
+  assert.match((await json<{ error: string }>(ambiguous)).error, /category/);
+
+  // With one, it counts: money coming back out to the bank reduces what is in.
+  assert.equal(
+    (await add({ contributionDate: "2026-08-01", amountNzd: -250, source: "csv", category: "withdrawal" })).status,
+    201,
+  );
 
   const listed = await json(await app.request("/api/contributions"));
   assert.equal(listed.contributions.length, 2);
-  assert.equal(listed.totalAllTime, 1250);
+  assert.equal(listed.totalAllTime, 750, "1000 deposited, 250 withdrawn");
   assert.equal(listed.contributions[1].source, "csv");
 
   const ranged = await json(await app.request("/api/contributions?from=2026-08-01"));
-  assert.equal(ranged.total, 250);
+  assert.equal(ranged.total, -250);
 
   db.close();
 });
