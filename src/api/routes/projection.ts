@@ -3,7 +3,14 @@ import type { DatabaseSync } from "node:sqlite";
 import { getActiveGoal, getGoal, listMilestones, totalSeries } from "../../db/repo.ts";
 import { todayNz } from "../../db/client.ts";
 import { projectScenarios, requiredMonthlyContribution, monthsToTarget } from "../../domain/projection.ts";
-import { getAssumptions, ANNUAL_RETURN_RANGE, MONTHLY_CONTRIBUTION_RANGE } from "../settings.ts";
+import { ASSET_CLASS_RETURNS, OBSERVATIONS_AS_OF } from "../../domain/fund-returns.ts";
+import {
+  ANNUAL_RETURN_RANGE,
+  MONTHLY_CONTRIBUTION_RANGE,
+  getAssumptions,
+  holdingsForBlend,
+  resolveAnnualReturn,
+} from "../settings.ts";
 import { notFound, queryNumber, reqId } from "../validate.ts";
 
 /** Default horizon for the scenario chart. */
@@ -20,6 +27,9 @@ export function projectionRoutes(db: DatabaseSync): Hono {
   app.get("/projection", (c) => {
     const url = new URL(c.req.url);
     const assumptions = getAssumptions(db);
+    // The derivation behind the default, and the per-fund evidence for it.
+    const resolution = resolveAnnualReturn(db);
+    const blend = holdingsForBlend(db);
     const today = todayNz();
     const series = totalSeries(db);
     const startValue = series.at(-1)?.value ?? 0;
@@ -96,6 +106,24 @@ export function projectionRoutes(db: DatabaseSync): Hono {
         monthlyContribution,
         spread,
         months,
+      },
+      /**
+       * Where the return came from, and what the portfolio's own funds have actually
+       * returned. The projection is arithmetic on an assumption; this is the working,
+       * so the UI can show the assumption next to the evidence instead of asking for
+       * trust in a number that appeared from nowhere.
+       */
+      returns: {
+        source: url.searchParams.has("return") ? "query" : resolution.source,
+        annualReturn,
+        derivedAnnualReturn: resolution.derived,
+        observedAnnualReturn: blend.observedRate,
+        volatility: blend.volatility,
+        covered: blend.covered,
+        unmatched: blend.unmatched,
+        asOf: OBSERVATIONS_AS_OF,
+        holdings: blend.holdings,
+        assetClasses: ASSET_CLASS_RETURNS,
       },
       scenarios: scenarios.map((scenario) => ({
         key: scenario.key,
