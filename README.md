@@ -49,7 +49,7 @@ real portfolio figures.
 
 | Command | Purpose |
 |---|---|
-| `npm test` | 275 tests (parsing, domain, collector, API, import, currency conversion, notifications, export, scheduling) on the built-in node:test runner |
+| `npm test` | 329 tests (parsing, domain, collector, API, import, currency conversion, notifications, export, scheduling) on the built-in node:test runner |
 | `npm run typecheck` | `tsc --noEmit`; the only use for the TypeScript compiler here |
 | `npm run spike` | Call Akahu once, report what came back, save a redacted fixture |
 | `npm run collect` | Run one collection pass, the daily job |
@@ -214,6 +214,33 @@ Detection reads the Akahu transaction feed for transfers into the Sharesies
 connection and proposes them as contributions. It never writes without `--apply`,
 and the dashboard card shows both the candidates and the near-misses it rejected,
 so a transfer it declined to match is visible rather than lost.
+
+### What counts as a contribution
+
+Two things in the log can look like money in, and only one of them is:
+
+- **external flows** — money crossing the boundary of your own finances: a deposit, a
+  withdrawal back to the bank, or a transfer the bank feed detected either way.
+- **trades** — buys into the account. A buy funded by a transfer is the *same money*
+  changing shelf inside the platform, and a sell is not money out, because the cash
+  stays inside Sharesies until it is actually withdrawn.
+
+Summing both counts the same money twice. It is not hypothetical: one portfolio showed
+$8,013.91 of contributions against a value of $5,211.51, because $5,300 of detected
+bank transfers and the $2,713.91 of buys they funded were both being added up.
+
+So there is one basis in force at a time, resolved setting, then environment, then
+"auto": external flows when any have been logged, buys as a proxy when none have (a
+history that predates the bank feed has only trades to count, and showing zero would be
+less honest than showing the proxy and saying so). The dashboard states which basis it
+is using, and the log badges the rows it leaves out, so a figure is never labelled as
+something it is not.
+
+Change it in the settings panel, or with `CONTRIBUTIONS_BASIS=external|trades|auto`.
+Under the external basis the transfers are platform-level: both Sharesies accounts
+share one nominee bank account and reference, so a transfer cannot be attributed to one
+portfolio over the other from its description — a reason to think of the line as "sent
+to Sharesies" rather than "arrived in this account", which is what the card says.
 
 ## Backup (Phase 4)
 

@@ -192,6 +192,63 @@ Two smaller things the report settled:
   trades. A file that names no portfolio, with a goal that tracks exactly one
   account, has its rows follow that account and says so in the preview.
 
+## Counting the same money twice
+
+**How it first looked.** A portfolio showing `$8,013.91` of
+contributions against a value of `$5,211.51`, with a chart that said the two lines
+disagreed by `$7,800.37`. Neither number was wrong; the pair of them was.
+
+Every row in the goal was correctly attributed. The problem was that **money was
+counted on both sides of the same movement**:
+
+| Source | Rows | Total | What it is |
+|---|---|---|---|
+| `bank`, unattributed by design | 8 | **$5,300** | transfers to Sharesies, 5 Aug – 30 Sep |
+| `csv`, the tracked account | 38 | **$2,713.91** | report buys into that account |
+| | 46 | **$8,013.91** | what the chart was adding up |
+
+One of those transfers is `$3,500` on 24 Sep; among the buys is a single `$2,500` on
+1 Oct. The second is the first being invested. Counting both counts that money twice.
+
+**The arithmetic that decides which side is the real money in.** The account is worth
+`$5,211.51` and `$5,300` was sent to it, so the honest reading is `-88.49` of fees and
+market movement. Meanwhile its holdings sum to `$2,711.50`, which matches the logged
+buys almost exactly — so the balance is those holdings plus about `$2,500` of
+uninvested cash. **There is no separate Sharesies wallet account in Akahu**; the cash
+sits inside the investment account's own balance. That resolved an earlier and wrong
+conclusion of ours, that a value rising without a matching buy row proved the report
+was incomplete. It did not: the money had arrived as cash.
+
+**The timing that made the chart look broken.** The `$2,500` buy is logged on 1 Oct,
+while the account's value only reflected it on 2 Oct. On 1 Oct the chart had
+contributions of `$8,013.91` against a value of `$213.54`, which is where the
+`$7,800.37` came from. A double count and a same-day lag, together.
+
+**The decision.** External flows only, with the trades basis kept as a fallback for a
+history that predates the bank feed. A buy funded by a transfer moves money that has
+already been counted, a sell is not money out because the cash stays inside the
+platform, and a bank feed does not need a report to be generated before it is complete
+— which is what makes external flows right immediately rather than eventually.
+
+Two details worth keeping in mind:
+
+* **`transfer` is not an external category.** The classifier buckets "wallet to
+  investment" under it, which is a movement between two of your own pockets. The
+  external categories are `deposit` and `withdrawal`, and bank-detected transfers are
+  external by source, not by category.
+* **The line is platform-level, not account-level.** Both Sharesies accounts share one
+  nominee bank account and reference (`12-3497-0007278-01`, `WW354043`), so a transfer
+  cannot be attributed to one portfolio over the other from its description. Hence
+  "sent to Sharesies" on the card rather than "arrived in this account": under the
+  external basis, `value = contributions + growth` is approximate by construction, and
+  the residual quietly holds uninvested cash, money in another portfolio, and fees.
+
+The rule exists in two forms — a pure function in `src/domain/contributions-basis.ts`
+and a SQL clause in `src/db/repo.ts`, because the totals are SUMs and filtering in
+JavaScript would mean loading every row to add up a subset. A test asserts that the two
+agree row for row on a log containing one of every kind, since two implementations of
+one rule is a second thing that can disagree with the total it explains.
+
 ## Where the projection's assumed return comes from
 
 The projection used a single number for the whole portfolio: `ASSUMED_ANNUAL_RETURN=0.07`,

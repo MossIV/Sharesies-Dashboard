@@ -47,6 +47,7 @@ Answered before the first real collection; the reasoning is in the plan's sectio
 | Goal scope | Sharesies accounts only, and only one of the two the connection exposes. The other is registered and snapshotted daily but excluded from the goal. KiwiSaver is out of scope by standing decision rather than by accident: it is connected, registered and snapshotted, and excluded deliberately by the connection-and-type rule. |
 | Target | A single amount on that one portfolio, with no target date. Standard 25/50/75/100% milestones. |
 | Progress basis | Portfolio value (not net contributions). |
+| What counts as a contribution | External flows: deposits, withdrawals and bank-detected transfers. Buys and sells inside the platform are logged but not summed, because a buy funded by a transfer is the same money and a sell leaves the cash inside Sharesies. Resolved setting → environment → auto, with buys as the fallback where no bank feed exists, and reported on the card rather than assumed. |
 | Hosting | A container on a NAS (QNAP Container Station), tested locally first — and now running there. |
 | Stack | TypeScript, no build step — Node runs it directly and `tsc` is only used for `--noEmit`. |
 | Notifications | Phone push, via ntfy. |
