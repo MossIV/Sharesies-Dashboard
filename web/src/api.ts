@@ -133,6 +133,11 @@ export interface Contribution {
   category: string | null;
   /** Whether the goal counts this row; decided server-side, once. */
   inGoal: boolean;
+  /**
+   * Whether it also counts under the basis in force: in the goal *and* money crossing
+   * the platform boundary, rather than a movement inside it. Also decided server-side.
+   */
+  counted: boolean;
 }
 
 /** The chart's series: value = contributions + growth, per snapshot date. */
@@ -148,7 +153,22 @@ export interface ContributionList {
   total: number;
   totalAllTime: number;
   excludedTotalAllTime: number;
-  counts: { all: number; inGoal: number; excluded: number };
+  counts: {
+    all: number;
+    inGoal: number;
+    /** The rows the totals above actually add up. */
+    counted: number;
+    excluded: number;
+    /** In the goal but internal to the platform, so logged and not counted. */
+    inGoalNotCounted: number;
+  };
+  /** What the described totals are counting. */
+  basis: "external" | "trades";
+  basisRequested: "external" | "trades" | "auto";
+  /** Where the basis in force came from. */
+  basisSource: "setting" | "environment" | "auto";
+  /** One sentence describing it, so the card does not have to explain the rule. */
+  basisNote: string;
   series: ContributionSeries;
   scope: "goal";
 }
@@ -382,6 +402,14 @@ export interface DumpCounts {
 
 export interface Settings {
   assumptions: { annualReturn: number; monthlyContribution: number };
+  /** What the contributions figure counts, and where that choice came from. */
+  contributions: {
+    basis: "external" | "trades";
+    requested: "external" | "trades" | "auto";
+    source: "setting" | "environment" | "auto";
+    hasExternalRows: boolean;
+    note: string;
+  };
   source: {
     requested: string | null;
     effective: "akahu" | "manual";
@@ -490,8 +518,12 @@ export const api = {
       body: JSON.stringify({ transactions }),
     }),
 
-  updateSettings: (patch: { annualReturn?: number; monthlyContribution?: number }) =>
-    request<{ assumptions: Settings["assumptions"] }>("/api/settings", {
+  updateSettings: (patch: {
+    annualReturn?: number;
+    monthlyContribution?: number;
+    contributionsBasis?: "external" | "trades" | "auto";
+  }) =>
+    request<{ assumptions: Settings["assumptions"]; contributions: Settings["contributions"] }>("/api/settings", {
       method: "PUT",
       body: JSON.stringify(patch),
     }),

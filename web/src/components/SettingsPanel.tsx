@@ -17,7 +17,11 @@ interface Props {
     updateGoal: (id: number, patch: Record<string, unknown>) => Promise<unknown>;
     createMilestone: (goalId: number, body: Record<string, unknown>) => Promise<unknown>;
     deleteMilestone: (id: number) => Promise<unknown>;
-    updateSettings: (patch: { annualReturn?: number; monthlyContribution?: number }) => Promise<unknown>;
+    updateSettings: (patch: {
+      annualReturn?: number;
+      monthlyContribution?: number;
+      contributionsBasis?: "external" | "trades" | "auto";
+    }) => Promise<unknown>;
     setManualValue: (value: number) => Promise<unknown>;
   };
 }
@@ -39,6 +43,9 @@ export function SettingsPanel({ settings, summary, onReload, api }: Props) {
     String(Math.round((settings?.assumptions.annualReturn ?? 0.07) * 1000) / 10),
   );
   const [monthly, setMonthly] = useState(String(settings?.assumptions.monthlyContribution ?? 500));
+  const [contribBasis, setContribBasis] = useState<"external" | "trades" | "auto">(
+    settings?.contributions.requested ?? "auto",
+  );
   const [manualValue, setManualValue] = useState(settings?.manualValueNzd ?? "");
 
   const [busy, setBusy] = useState(false);
@@ -275,6 +282,44 @@ export function SettingsPanel({ settings, summary, onReload, api }: Props) {
               Save assumptions
             </button>
           </div>
+        </section>
+
+        <section>
+          <h3 style={{ fontSize: 14, margin: "0 0 10px" }}>What counts as a contribution</h3>
+          <p className="muted tiny" style={{ marginTop: 0 }}>{settings?.contributions.note ?? ""}</p>
+          <div className="form-row" style={{ marginBottom: 0 }}>
+            <div style={{ flex: "0 1 300px" }}>
+              <label htmlFor="contrib-basis">Counted toward contributions</label>
+              <select
+                id="contrib-basis"
+                value={contribBasis}
+                onChange={(event) => setContribBasis(event.target.value as "external" | "trades" | "auto")}
+                style={{ width: "100%" }}
+              >
+                <option value="auto">Automatic — external flows when there are any</option>
+                <option value="external">Money sent to Sharesies only</option>
+                <option value="trades">Buys into the account, as a proxy</option>
+              </select>
+            </div>
+            <button
+              className="ghost"
+              disabled={busy}
+              onClick={() =>
+                run("Contribution basis saved", () => api.updateSettings({ contributionsBasis: contribBasis }))
+              }
+            >
+              Save basis
+            </button>
+          </div>
+          {settings && (
+            <p className="muted tiny">
+              In force: <strong>{settings.contributions.basis === "external" ? "money sent" : "buys as a proxy"}</strong>
+              {" "}— {settings.contributions.source === "auto"
+                ? "chosen automatically from what is logged"
+                : `set by ${settings.contributions.source}`}
+              .
+            </p>
+          )}
         </section>
 
         <section>

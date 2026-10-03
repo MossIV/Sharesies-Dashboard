@@ -345,9 +345,12 @@ function WhereTheReturnComesFrom({ returns }: { returns: Projection["returns"] }
 export function ContributionsChart({
   series,
   contributionCount,
+  basis = "trades",
 }: {
   series: ContributionSeries | null;
   contributionCount: number;
+  /** What the contributions line counts, so the caveat below can be the right one. */
+  basis?: "external" | "trades";
 }) {
   const rows = series?.rows ?? [];
   const latest = series?.latest ?? null;
@@ -440,8 +443,9 @@ export function ContributionsChart({
           )}
 
           <p className="muted tiny" style={{ marginTop: 8 }}>
-            Contributions are only the rows the goal counts, so this line and the goal's value describe the same
-            accounts.
+            {basis === "external"
+              ? "Contributions count money sent to Sharesies: deposits, withdrawals, and bank transfers detected in the feed. Buys and sells inside the account are logged but not counted, so money already counted is not counted twice — and a gap can mean a transfer that has arrived without reaching this account yet."
+              : "No external transfers have been logged, so buys into this account stand in as a proxy for money in — the stricter figure needs a deposit or a bank-transfer scan."}
           </p>
         </>
       )}
